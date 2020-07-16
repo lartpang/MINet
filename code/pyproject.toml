@@ -1,0 +1,8 @@
+# https://github.com/LongTengDao/TOML/
+
+[tool.black]
+line-length = 99
+--verbose = true
+exclude = '''
+/(\.eggs|\.git|\.hg|\.mypy|_cache|\.nox|\.tox|\.venv|\.svn|\.idea|\.vscode|output|_build|buck-out|build|dist)/
+'''
