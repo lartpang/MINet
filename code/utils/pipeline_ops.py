@@ -41,6 +41,7 @@ def save_checkpoint(
     model: nn.Module = None,
     optimizer: optim.Optimizer = None,
     scheduler: sche._LRScheduler = None,
+    amp=None,
     exp_name: str = "",
     current_epoch: int = 1,
     full_net_path: str = "",
@@ -53,6 +54,7 @@ def save_checkpoint(
         model (nn.Module): model object
         optimizer (optim.Optimizer): optimizer object
         scheduler (sche._LRScheduler): scheduler object
+        amp (): apex.amp
         exp_name (str): exp_name
         current_epoch (int): in the epoch, model **will** be trained
         full_net_path (str): the path for saving the full model parameters
@@ -65,6 +67,7 @@ def save_checkpoint(
         "net_state": model.state_dict(),
         "opti_state": optimizer.state_dict(),
         "sche_state": scheduler.state_dict(),
+        "amp_state": amp.state_dict() if amp else None,
     }
     torch.save(state_dict, full_net_path)
     torch.save(model.state_dict(), state_net_path)
@@ -74,6 +77,7 @@ def resume_checkpoint(
     model: nn.Module = None,
     optimizer: optim.Optimizer = None,
     scheduler: sche._LRScheduler = None,
+    amp=None,
     exp_name: str = "",
     load_path: str = "",
     mode: str = "all",
@@ -85,31 +89,46 @@ def resume_checkpoint(
         model (nn.Module): model object
         optimizer (optim.Optimizer): optimizer object
         scheduler (sche._LRScheduler): scheduler object
+        amp (): apex.amp
         exp_name (str): exp_name
         load_path (str): 模型存放路径
         mode (str): 选择哪种模型恢复模式:
             - 'all': 回复完整模型，包括训练中的的参数；
             - 'onlynet': 仅恢复模型权重参数
-            
+
     Returns mode: 'all' start_epoch; 'onlynet' None
     """
     if os.path.exists(load_path) and os.path.isfile(load_path):
         construct_print(f"Loading checkpoint '{load_path}'")
         checkpoint = torch.load(load_path)
         if mode == "all":
-            if exp_name == checkpoint["arch"]:
-                start_epoch = checkpoint["epoch"]
-                model.load_state_dict(checkpoint["net_state"])
-                optimizer.load_state_dict(checkpoint["opti_state"])
-                scheduler.load_state_dict(checkpoint["sche_state"])
-                construct_print(
-                    f"Loaded '{load_path}' " f"(will train at epoch" f" {checkpoint['epoch']})"
-                )
-                return start_epoch
+            if exp_name and exp_name != checkpoint["arch"]:
+                # 如果给定了exp_name，那么就必须匹配对应的checkpoint["arch"]，否则不作要求
+                raise Exception(f"We can not match {exp_name} with {load_path}.")
+
+            start_epoch = checkpoint["epoch"]
+            if hasattr(model, "module"):
+                model.module.load_state_dict(checkpoint["net_state"])
             else:
-                raise Exception(f"{load_path} does not match.")
+                model.load_state_dict(checkpoint["net_state"])
+            optimizer.load_state_dict(checkpoint["opti_state"])
+            scheduler.load_state_dict(checkpoint["sche_state"])
+            if checkpoint.get("amp_state", None):
+                if amp:
+                    amp.load_state_dict(checkpoint["amp_state"])
+                else:
+                    construct_print("You are not using amp.")
+            else:
+                construct_print("The state_dict of amp is None.")
+            construct_print(
+                f"Loaded '{load_path}' " f"(will train at epoch" f" {checkpoint['epoch']})"
+            )
+            return start_epoch
         elif mode == "onlynet":
-            model.load_state_dict(checkpoint)
+            if hasattr(model, "module"):
+                model.module.load_state_dict(checkpoint)
+            else:
+                model.load_state_dict(checkpoint)
             construct_print(
                 f"Loaded checkpoint '{load_path}' " f"(only has the model's weight params)"
             )

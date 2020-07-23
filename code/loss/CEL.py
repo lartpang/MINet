@@ -14,6 +14,7 @@ class CEL(nn.Module):
         self.eps = 1e-6
 
     def forward(self, pred, target):
+        pred = pred.sigmoid()
         intersection = pred * target
         numerator = (pred - intersection).sum() + (target - intersection).sum()
         denominator = pred.sum() + target.sum()

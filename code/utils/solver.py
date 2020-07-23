@@ -4,18 +4,18 @@ from pprint import pprint
 import numpy as np
 import torch
 from PIL import Image
-from tensorboardX import SummaryWriter
-from torch.nn import BCELoss
 from torchvision import transforms
-from torchvision.utils import make_grid
 from tqdm import tqdm
 
 import network as network_lib
 from loss.CEL import CEL
-from utils.config import arg_config, path_config
-from utils.imgs.create_loader_imgs import create_loader
+from utils.dataloader import create_loader
 from utils.metric import cal_maxf, cal_pr_mae_meanf
-from utils.misc import AvgMeter, construct_print, make_log, write_xlsx
+from utils.misc import (
+    AvgMeter,
+    construct_print,
+    write_data_to_file,
+)
 from utils.pipeline_ops import (
     get_total_loss,
     make_optimizer,
@@ -23,106 +23,115 @@ from utils.pipeline_ops import (
     resume_checkpoint,
     save_checkpoint,
 )
+from utils.recorder import TBRecorder, Timer, XLSXRecoder
 
 
 class Solver:
-    def __init__(self, args, path):
+    def __init__(self, exp_name: str, arg_dict: dict, path_dict: dict):
         super(Solver, self).__init__()
-        self.args = args
-        self.path = path
+        self.exp_name = exp_name
+        self.arg_dict = arg_dict
+        self.path_dict = path_dict
+
         self.dev = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.to_pil = transforms.ToPILImage()
-        self.exp_name = args["exp_name"]
-        if "@" in self.exp_name:
-            network_realname = self.exp_name.split("@")[0]
-        else:
-            network_realname = self.exp_name
-        self.exp_name = self.exp_name.replace("@", "_")
 
-        self.tr_data_path = self.args["rgb_data"]["tr_data_path"]
-        self.te_data_list = self.args["rgb_data"]["te_data_list"]
+        self.tr_data_path = self.arg_dict["rgb_data"]["tr_data_path"]
+        self.te_data_list = self.arg_dict["rgb_data"]["te_data_list"]
 
-        self.save_path = self.path["save"]
-        self.save_pre = self.args["save_pre"]
-        if self.args["tb_update"] > 0:
-            self.tb = SummaryWriter(self.path["tb"])
+        self.save_path = self.path_dict["save"]
+        self.save_pre = self.arg_dict["save_pre"]
+
+        if self.arg_dict["tb_update"] > 0:
+            self.tb_recorder = TBRecorder(tb_path=self.path_dict["tb"])
+        if self.arg_dict["xlsx_name"]:
+            self.xlsx_recorder = XLSXRecoder(xlsx_path=self.path_dict["xlsx"])
 
         # 依赖与前面属性的属性
-        self.pth_path = self.path["final_state_net"]
         self.tr_loader = create_loader(
             data_path=self.tr_data_path,
-            mode="train",
+            training=True,
+            size_list=self.arg_dict["size_list"],
+            prefix=self.arg_dict["prefix"],
             get_length=False,
-            prefix=self.args["prefix"],
-            size_list=self.args["size_list"],
         )
-        self.end_epoch = self.args["epoch_num"]
+        self.end_epoch = self.arg_dict["epoch_num"]
         self.iter_num = self.end_epoch * len(self.tr_loader)
 
-        if hasattr(network_lib, network_realname):
-            self.net = getattr(network_lib, network_realname)().to(self.dev)
+        if hasattr(network_lib, self.arg_dict["model"]):
+            self.net = getattr(network_lib, self.arg_dict["model"])().to(self.dev)
         else:
             raise AttributeError
-        pprint(self.args)
+        pprint(self.arg_dict)
+
+        if self.arg_dict["resume_mode"] == "test":
+            # resume model only to test model.
+            # self.start_epoch is useless
+            resume_checkpoint(
+                model=self.net, load_path=self.path_dict["final_state_net"], mode="onlynet",
+            )
+            return
+
+        self.loss_funcs = [
+            torch.nn.BCEWithLogitsLoss(reduction=self.arg_dict["reduction"]).to(self.dev)
+        ]
+        if self.arg_dict["use_aux_loss"]:
+            self.loss_funcs.append(CEL().to(self.dev))
 
         self.opti = make_optimizer(
             model=self.net,
-            optimizer_type=self.args["optim"],
+            optimizer_type=self.arg_dict["optim"],
             optimizer_info=dict(
-                lr=self.args["lr"],
-                momentum=self.args["momentum"],
-                weight_decay=self.args["weight_decay"],
-                nesterov=self.args["nesterov"],
+                lr=self.arg_dict["lr"],
+                momentum=self.arg_dict["momentum"],
+                weight_decay=self.arg_dict["weight_decay"],
+                nesterov=self.arg_dict["nesterov"],
             ),
         )
         self.sche = make_scheduler(
             optimizer=self.opti,
-            total_num=self.iter_num if self.args["sche_usebatch"] else self.end_epoch,
-            scheduler_type=self.args["lr_type"],
+            total_num=self.iter_num if self.arg_dict["sche_usebatch"] else self.end_epoch,
+            scheduler_type=self.arg_dict["lr_type"],
             scheduler_info=dict(
-                lr_decay=self.args["lr_decay"], warmup_epoch=self.args["warmup_epoch"]
+                lr_decay=self.arg_dict["lr_decay"], warmup_epoch=self.arg_dict["warmup_epoch"]
             ),
         )
 
-        if self.args["resume_mode"] == "train":
+        # AMP
+        if self.arg_dict["use_amp"]:
+            construct_print("Now, we will use the amp to accelerate training!")
+            from apex import amp
+
+            self.amp = amp
+            self.net, self.opti = self.amp.initialize(self.net, self.opti, opt_level="O1")
+        else:
+            self.amp = None
+
+        if self.arg_dict["resume_mode"] == "train":
             # resume model to train the model
             self.start_epoch = resume_checkpoint(
                 model=self.net,
                 optimizer=self.opti,
                 scheduler=self.sche,
+                amp=self.amp,
                 exp_name=self.exp_name,
-                load_path=self.path["final_full_net"],
+                load_path=self.path_dict["final_full_net"],
                 mode="all",
             )
-            self.only_test = False
-        elif self.args["resume_mode"] == "test":
-            # resume model only to test model.
-            # self.start_epoch is useless
-            resume_checkpoint(
-                model=self.net, load_path=self.pth_path, mode="onlynet",
-            )
-            self.only_test = True
-        elif not self.args["resume_mode"]:
+        else:
             # only train a new model.
             self.start_epoch = 0
-            self.only_test = False
-        else:
-            raise NotImplementedError
-
-        if not self.only_test:
-            # 损失函数
-            self.loss_funcs = [BCELoss(reduction=self.args["reduction"]).to(self.dev)]
-            if self.args["use_aux_loss"]:
-                self.loss_funcs.append(CEL().to(self.dev))
+        return
 
     def train(self):
         for curr_epoch in range(self.start_epoch, self.end_epoch):
             train_loss_record = AvgMeter()
+
             for train_batch_id, train_data in enumerate(self.tr_loader):
                 curr_iter = curr_epoch * len(self.tr_loader) + train_batch_id
 
                 self.opti.zero_grad()
-                train_inputs, train_masks, *train_other_data = train_data
+                train_inputs, train_masks, _ = train_data
                 train_inputs = train_inputs.to(self.dev, non_blocking=True)
                 train_masks = train_masks.to(self.dev, non_blocking=True)
                 train_preds = self.net(train_inputs)
@@ -130,10 +139,14 @@ class Solver:
                 train_loss, loss_item_list = get_total_loss(
                     train_preds, train_masks, self.loss_funcs
                 )
-                train_loss.backward()
+                if self.amp:
+                    with self.amp.scale_loss(train_loss, self.opti) as scaled_loss:
+                        scaled_loss.backward()
+                else:
+                    train_loss.backward()
                 self.opti.step()
 
-                if self.args["sche_usebatch"]:
+                if self.arg_dict["sche_usebatch"]:
                     self.sche.step()
 
                 # 仅在累计的时候使用item()获取数据
@@ -142,33 +155,35 @@ class Solver:
                 train_loss_record.update(train_iter_loss, train_batch_size)
 
                 # 显示tensorboard
-                if self.args["tb_update"] > 0 and (curr_iter + 1) % self.args["tb_update"] == 0:
-                    self.tb.add_scalar("data/trloss_avg", train_loss_record.avg, curr_iter)
-                    self.tb.add_scalar("data/trloss_iter", train_iter_loss, curr_iter)
-                    for idx, param_groups in enumerate(self.opti.param_groups):
-                        self.tb.add_scalar(f"data/lr_{idx}", param_groups["lr"], curr_iter)
-                    tr_tb_mask = make_grid(train_masks, nrow=train_batch_size, padding=5)
-                    self.tb.add_image("trmasks", tr_tb_mask, curr_iter)
-                    tr_tb_out_1 = make_grid(train_preds, nrow=train_batch_size, padding=5)
-                    self.tb.add_image("trsodout", tr_tb_out_1, curr_iter)
+                if (
+                    self.arg_dict["tb_update"] > 0
+                    and (curr_iter + 1) % self.arg_dict["tb_update"] == 0
+                ):
+                    self.tb_recorder.record_curve("trloss_avg", train_loss_record.avg, curr_iter)
+                    self.tb_recorder.record_curve("trloss_iter", train_iter_loss, curr_iter)
+                    self.tb_recorder.record_curve("lr", self.opti.param_groups, curr_iter)
+                    self.tb_recorder.record_image("trmasks", train_masks, curr_iter)
+                    self.tb_recorder.record_image("trsodout", train_preds.sigmoid(), curr_iter)
+                    self.tb_recorder.record_image("trsodin", train_inputs, curr_iter)
 
                 # 记录每一次迭代的数据
-                if self.args["print_freq"] > 0 and (curr_iter + 1) % self.args["print_freq"] == 0:
+                if (
+                    self.arg_dict["print_freq"] > 0
+                    and (curr_iter + 1) % self.arg_dict["print_freq"] == 0
+                ):
                     lr_str = ",".join(
                         [f"{param_groups['lr']:.7f}" for param_groups in self.opti.param_groups]
                     )
                     log = (
                         f"[I:{curr_iter}/{self.iter_num}][E:{curr_epoch}:{self.end_epoch}]>"
-                        f"[{self.exp_name}]"
-                        f"[Lr:{lr_str}]"
-                        f"[Avg:{train_loss_record.avg:.5f}|Cur:{train_iter_loss:.5f}|"
+                        f"[{self.exp_name}][Lr:{lr_str}][Avg:{train_loss_record.avg:.5f}|Cur:{train_iter_loss:.5f}|"
                         f"{loss_item_list}]"
                     )
                     print(log)
-                    make_log(self.path["tr_log"], log)
+                    write_data_to_file(log, self.path_dict["tr_log"])
 
             # 根据周期修改学习率
-            if not self.args["sche_usebatch"]:
+            if not self.arg_dict["sche_usebatch"]:
                 self.sche.step()
 
             # 每个周期都进行保存测试，保存的是针对第curr_epoch+1周期的参数
@@ -176,15 +191,20 @@ class Solver:
                 model=self.net,
                 optimizer=self.opti,
                 scheduler=self.sche,
+                amp=self.amp,
                 exp_name=self.exp_name,
                 current_epoch=curr_epoch + 1,
-                full_net_path=self.path["final_full_net"],
-                state_net_path=self.path["final_state_net"],
+                full_net_path=self.path_dict["final_full_net"],
+                state_net_path=self.path_dict["final_state_net"],
             )  # 保存参数
 
-        total_results = self.test()
-        # save result into xlsx file.
-        write_xlsx(self.exp_name, total_results)
+        if self.arg_dict["use_amp"]:
+            # https://github.com/NVIDIA/apex/issues/567
+            with self.amp.disable_casts():
+                construct_print("When evaluating, we wish to evaluate in pure fp32 ")
+                self.test()
+        else:
+            self.test()
 
     def test(self):
         self.net.eval()
@@ -193,21 +213,27 @@ class Solver:
         for data_name, data_path in self.te_data_list.items():
             construct_print(f"Testing with testset: {data_name}")
             self.te_loader = create_loader(
-                data_path=data_path, mode="test", get_length=False, prefix=self.args["prefix"],
+                data_path=data_path,
+                training=False,
+                prefix=self.arg_dict["prefix"],
+                get_length=False,
             )
-            self.save_path = os.path.join(self.path["save"], data_name)
+            self.save_path = os.path.join(self.path_dict["save"], data_name)
             if not os.path.exists(self.save_path):
                 construct_print(f"{self.save_path} do not exist. Let's create it.")
                 os.makedirs(self.save_path)
             results = self.__test_process(save_pre=self.save_pre)
             msg = f"Results on the testset({data_name}:'{data_path}'): {results}"
             construct_print(msg)
-            make_log(self.path["te_log"], msg)
+            write_data_to_file(msg, self.path_dict["te_log"])
 
-            total_results[data_name.upper()] = results
+            total_results[data_name] = results
 
         self.net.train()
-        return total_results
+
+        if self.arg_dict["xlsx_name"]:
+            # save result into xlsx file.
+            self.xlsx_recorder.write_xlsx(self.exp_name, total_results)
 
     def __test_process(self, save_pre):
         loader = self.te_loader
@@ -221,11 +247,11 @@ class Solver:
         for test_batch_id, test_data in tqdm_iter:
             tqdm_iter.set_description(f"{self.exp_name}: te=>{test_batch_id + 1}")
             with torch.no_grad():
-                in_imgs, in_names, in_mask_paths = test_data
+                in_imgs, in_mask_paths, in_names = test_data
                 in_imgs = in_imgs.to(self.dev, non_blocking=True)
                 outputs = self.net(in_imgs)
 
-            outputs_np = outputs.cpu().detach()
+            outputs_np = outputs.sigmoid().cpu().detach()
 
             for item_id, out_item in enumerate(outputs_np):
                 gimg_path = os.path.join(in_mask_paths[item_id])
@@ -248,8 +274,3 @@ class Solver:
         maxf = cal_maxf([pre.avg for pre in pres], [rec.avg for rec in recs])
         results = {"MAXF": maxf, "MEANF": meanfs.avg, "MAE": maes.avg}
         return results
-
-
-if __name__ == "__main__":
-    solver = Solver(args=arg_config, path=path_config)
-    print(solver.exp_name)

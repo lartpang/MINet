@@ -64,7 +64,7 @@ class LightMINet_VGG16(nn.Module):
 
         out_data = self.classifier(out_data_1)
 
-        return out_data.sigmoid()
+        return out_data
 
 
 class CPLightMINet_VGG16(nn.Module):
@@ -114,7 +114,7 @@ class CPLightMINet_VGG16(nn.Module):
         out_data_2 = checkpoint(self.checkpoint_de_2, in_data_2, out_data_4)
         out_data_1 = checkpoint(self.checkpoint_de_1, in_data_1, out_data_2)
         out_data = self.classifier(out_data_1)
-        return out_data.sigmoid()
+        return out_data
 
     def checkpoint_en_1(self, in_data, dummy_arg=None):
         # 这里向前传播的时候, 不仅传入x, 还传入一个有梯度的变量, 但是没有参与计算
@@ -217,7 +217,7 @@ class CPLightMINet_Res50(nn.Module):
         out_data_4 = checkpoint(self.checkpoint_de_4, in_data_4, out_data_8)
         out_data_2 = checkpoint(self.checkpoint_de_2, in_data_2, out_data_4)
         out_data = checkpoint(self.checkpoint_de_1, out_data_2)
-        return out_data.sigmoid()
+        return out_data
 
     def checkpoint_en_2(self, in_data, dummy_arg=None):
         # 这里向前传播的时候, 不仅传入x, 还传入一个有梯度的变量, 但是没有参与计算

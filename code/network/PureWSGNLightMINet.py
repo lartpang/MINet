@@ -54,7 +54,7 @@ class WSGNCPLMINet_Res50(nn.Module):
         out_data_4 = checkpoint(self.checkpoint_de_4, in_data_4, out_data_8)
         out_data_2 = checkpoint(self.checkpoint_de_2, in_data_2, out_data_4)
         out_data = checkpoint(self.checkpoint_de_1, out_data_2)
-        return out_data.sigmoid()
+        return out_data
     
     def checkpoint_en_2(self, in_data, dummy_arg=None):
         # 这里向前传播的时候, 不仅传入x, 还传入一个有梯度的变量, 但是没有参与计算

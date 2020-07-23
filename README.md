@@ -15,6 +15,14 @@ CVPR 2020.
 
 The code and experimental results have be released now :smile:.
 
+* 2020/7/23:
+    * [X] Improve and simplify the configuration of the project.
+    * [X] Introduce the support of [`Amp: Automatic Mixed Precision`](https://github.com/NVIDIA/apex). ([Quick Start](https://github.com/NVIDIA/apex#linux))
+    * [X] Confirm the correctness of the function of saving and resuming the checkpoint. 
+        * [X] The training was interrupted. 
+        * [X] Training from scratch. 
+        * [X] Test only.
+    * [X] Confirm the correctness of the function of exporting xlsx.
 * 2020/7/16:
     * Fix the mistake pointed out by @sjf18 in our code for testing FPS, which will be corrected in the later version of the paper.
 * 2020/7/14:

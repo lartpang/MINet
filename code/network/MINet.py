@@ -64,7 +64,7 @@ class MINet_VGG16(nn.Module):
 
         out_data = self.classifier(out_data_1)
 
-        return out_data.sigmoid()
+        return out_data
 
 
 class MINet_Res50(nn.Module):
@@ -120,7 +120,7 @@ class MINet_Res50(nn.Module):
         out_data_1 = self.upconv1(self.upsample(out_data_2, scale_factor=2))  # 32
         out_data = self.classifier(out_data_1)
 
-        return out_data.sigmoid()
+        return out_data
 
 
 if __name__ == "__main__":
