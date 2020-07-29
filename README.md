@@ -58,7 +58,8 @@ The code and experimental results have be released now :smile:.
     - Baidu Pan: <https://pan.baidu.com/s/1zN7m4aeDhRvTOeF2naATRg> (baidu: 48au)
     - Google Drive: <https://drive.google.com/file/d/1gUYu0hO_8Xc5jgpzetuOVFDrqeSOiKZN/view?usp=sharing>
 * Results & Pretrained Parameters:
-    - <https://drive.google.com/drive/folders/16yTcf_m-ehnhWgXlN6hbZpBKMy6lYIQQ?usp=sharing>
+    - [Google Drive](https://drive.google.com/drive/folders/16yTcf_m-ehnhWgXlN6hbZpBKMy6lYIQQ?usp=sharing)
+    - [BaiduYunPan(tl7k)](https://pan.baidu.com/s/1KkmkcodAVxJT8NRA63nBag)
 
 ## Paper Details
 

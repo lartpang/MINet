@@ -5,6 +5,7 @@
 ![GitHub issues](https://img.shields.io/github/issues/lartpang/MINet?style=flat-square)
 ![GitHub stars](https://img.shields.io/github/stars/lartpang/MINet?style=flat-square)
 [![CVPR Page](https://img.shields.io/badge/CVPR%202020-MINet-blue?style=flat-square)](https://openaccess.thecvf.com/content_CVPR_2020/html/Pang_Multi-Scale_Interactive_Network_for_Salient_Object_Detection_CVPR_2020_paper.html)
+[![Arxiv Page](https://img.shields.io/badge/Arxiv-2007.09062-red?style=flat-square)](https://arxiv.org/abs/2007.09062)
 
 ## Folders & Files
 
