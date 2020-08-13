@@ -1,6 +1,5 @@
 import shutil
 from datetime import datetime
-import torch
 
 from config import arg_config, proj_root
 from utils.misc import construct_exp_name, construct_path, construct_print, pre_mkdir, set_seed

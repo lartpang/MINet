@@ -160,6 +160,10 @@ def _collate_fn(batch, size_list):
 
 
 def _mask_loader(dataset, shuffle, drop_last, size_list):
+    assert (torch.__version__[:3]) >= 1.2, (
+        "If you want to use the pytorch < 1.2, you need to "
+        "comment out the line `collate_fn=...` when you set the `size_list` to `None`."
+    )
     return DataLoaderX(
         dataset=dataset,
         collate_fn=partial(_collate_fn, size_list=size_list) if size_list else None,

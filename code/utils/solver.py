@@ -262,7 +262,7 @@ class Solver:
                     oimg_path = os.path.join(self.save_path, in_names[item_id] + ".png")
                     out_img.save(oimg_path)
 
-                gt_img = np.asarray(gt_img)
+                gt_img = np.array(gt_img)
                 out_img = np.array(out_img)
                 ps, rs, mae, meanf = cal_pr_mae_meanf(out_img, gt_img)
                 for pidx, pdata in enumerate(zip(ps, rs)):

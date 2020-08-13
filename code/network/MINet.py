@@ -124,6 +124,6 @@ class MINet_Res50(nn.Module):
 
 
 if __name__ == "__main__":
-    in_data = torch.randn((1, 3, 288, 288))
+    in_data = torch.randn((1, 3, 320, 320))
     net = MINet_VGG16()
-    print(net(in_data).size())
+    print(sum([x.nelement() for x in net.parameters()]))
