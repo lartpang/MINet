@@ -16,7 +16,7 @@ dutstr_path = os.path.join(datasets_root, "Saliency/RGBSOD", "DUTS/Train")
 dutste_path = os.path.join(datasets_root, "Saliency/RGBSOD", "DUTS/Test")
 
 arg_config = {
-    "model": "CPLightMINet_Res50",  # 实际使用的模型，需要在`network/__init__.py`中导入
+    "model": "MINet_VGG16",  # 实际使用的模型，需要在`network/__init__.py`中导入
     "info": "",  # 关于本次实验的额外信息说明，这个会附加到本次试验的exp_name的结尾，如果为空，则不会附加内容。
     "use_amp": False,  # 是否使用amp加速训练
     "resume_mode": "",  # the mode for resume parameters: ['train', 'test', '']

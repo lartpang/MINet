@@ -126,9 +126,7 @@ class Solver:
     def train(self):
         for curr_epoch in range(self.start_epoch, self.end_epoch):
             train_loss_record = AvgMeter()
-
-            for train_batch_id, train_data in enumerate(self.tr_loader):
-                self._train_per_epoch(curr_epoch, train_batch_id, train_data, train_loss_record)
+            self._train_per_epoch(curr_epoch, train_loss_record)
 
             # 根据周期修改学习率
             if not self.arg_dict["sche_usebatch"]:
@@ -149,58 +147,67 @@ class Solver:
         if self.arg_dict["use_amp"]:
             # https://github.com/NVIDIA/apex/issues/567
             with self.amp.disable_casts():
-                construct_print("When evaluating, we wish to evaluate in pure fp32 ")
+                construct_print("When evaluating, we wish to evaluate in pure fp32.")
                 self.test()
         else:
             self.test()
 
     @Timer
-    def _train_per_epoch(self, curr_epoch, train_batch_id, train_data, train_loss_record):
-        curr_iter = curr_epoch * len(self.tr_loader) + train_batch_id
+    def _train_per_epoch(self, curr_epoch, train_loss_record):
+        for train_batch_id, train_data in enumerate(self.tr_loader):
+            curr_iter = curr_epoch * len(self.tr_loader) + train_batch_id
 
-        self.opti.zero_grad()
+            self.opti.zero_grad()
 
-        train_inputs, train_masks, _ = train_data
-        train_inputs = train_inputs.to(self.dev, non_blocking=True)
-        train_masks = train_masks.to(self.dev, non_blocking=True)
-        train_preds = self.net(train_inputs)
+            train_inputs, train_masks, _ = train_data
+            train_inputs = train_inputs.to(self.dev, non_blocking=True)
+            train_masks = train_masks.to(self.dev, non_blocking=True)
+            train_preds = self.net(train_inputs)
 
-        train_loss, loss_item_list = get_total_loss(train_preds, train_masks, self.loss_funcs)
-        if self.amp:
-            with self.amp.scale_loss(train_loss, self.opti) as scaled_loss:
-                scaled_loss.backward()
-        else:
-            train_loss.backward()
-        self.opti.step()
+            train_loss, loss_item_list = get_total_loss(train_preds, train_masks, self.loss_funcs)
+            if self.amp:
+                with self.amp.scale_loss(train_loss, self.opti) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                train_loss.backward()
+            self.opti.step()
 
-        if self.arg_dict["sche_usebatch"]:
-            self.sche.step()
+            if self.arg_dict["sche_usebatch"]:
+                self.sche.step()
 
-        # 仅在累计的时候使用item()获取数据
-        train_iter_loss = train_loss.item()
-        train_batch_size = train_inputs.size(0)
-        train_loss_record.update(train_iter_loss, train_batch_size)
+            # 仅在累计的时候使用item()获取数据
+            train_iter_loss = train_loss.item()
+            train_batch_size = train_inputs.size(0)
+            train_loss_record.update(train_iter_loss, train_batch_size)
 
-        # 显示tensorboard
-        if self.arg_dict["tb_update"] > 0 and (curr_iter + 1) % self.arg_dict["tb_update"] == 0:
-            self.tb_recorder.record_curve("trloss_avg", train_loss_record.avg, curr_iter)
-            self.tb_recorder.record_curve("trloss_iter", train_iter_loss, curr_iter)
-            self.tb_recorder.record_curve("lr", self.opti.param_groups, curr_iter)
-            self.tb_recorder.record_image("trmasks", train_masks, curr_iter)
-            self.tb_recorder.record_image("trsodout", train_preds.sigmoid(), curr_iter)
-            self.tb_recorder.record_image("trsodin", train_inputs, curr_iter)
-        # 记录每一次迭代的数据
-        if self.arg_dict["print_freq"] > 0 and (curr_iter + 1) % self.arg_dict["print_freq"] == 0:
-            lr_str = ",".join(
-                [f"{param_groups['lr']:.7f}" for param_groups in self.opti.param_groups]
-            )
-            log = (
-                f"[I:{curr_iter}/{self.iter_num}][E:{curr_epoch}:{self.end_epoch}]>"
-                f"[{self.exp_name}][Lr:{lr_str}][Avg:{train_loss_record.avg:.5f}|Cur:{train_iter_loss:.5f}|"
-                f"{loss_item_list}]"
-            )
-            print(log)
-            write_data_to_file(log, self.path_dict["tr_log"])
+            # 显示tensorboard
+            if (
+                self.arg_dict["tb_update"] > 0
+                and (curr_iter + 1) % self.arg_dict["tb_update"] == 0
+            ):
+                self.tb_recorder.record_curve("trloss_avg", train_loss_record.avg, curr_iter)
+                self.tb_recorder.record_curve("trloss_iter", train_iter_loss, curr_iter)
+                self.tb_recorder.record_curve("lr", self.opti.param_groups, curr_iter)
+                self.tb_recorder.record_image("trmasks", train_masks, curr_iter)
+                self.tb_recorder.record_image("trsodout", train_preds.sigmoid(), curr_iter)
+                self.tb_recorder.record_image("trsodin", train_inputs, curr_iter)
+            # 记录每一次迭代的数据
+            if (
+                self.arg_dict["print_freq"] > 0
+                and (curr_iter + 1) % self.arg_dict["print_freq"] == 0
+            ):
+                lr_str = ",".join(
+                    [f"{param_groups['lr']:.7f}" for param_groups in self.opti.param_groups]
+                )
+                log = (
+                    f"[{curr_iter}:{self.iter_num}/{curr_epoch}:{self.end_epoch}]"
+                    f"[{self.exp_name}]"
+                    f"[Lr:{lr_str}]\n"
+                    f"[M:{train_loss_record.avg:.5f}|C:{train_iter_loss:.5f}]"
+                    f"{loss_item_list}"
+                )
+                print(log)
+                write_data_to_file(log, self.path_dict["tr_log"])
 
     def test(self):
         self.net.eval()

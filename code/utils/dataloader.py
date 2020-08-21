@@ -160,7 +160,7 @@ def _collate_fn(batch, size_list):
 
 
 def _mask_loader(dataset, shuffle, drop_last, size_list):
-    assert (torch.__version__[:3]) >= 1.2, (
+    assert float(torch.__version__[:3]) >= 1.2, (
         "If you want to use the pytorch < 1.2, you need to "
         "comment out the line `collate_fn=...` when you set the `size_list` to `None`."
     )
@@ -191,7 +191,7 @@ def create_loader(data_path, training, size_list=None, prefix=(".jpg", ".png"), 
         imageset = ImageFolder(
             data_path, in_size=arg_config["input_size"], prefix=prefix, training=False,
         )
-        loader = _mask_loader(imageset, shuffle=False, drop_last=False, size_list=size_list)
+        loader = _mask_loader(imageset, shuffle=False, drop_last=False, size_list=None)
 
     if get_length:
         length_of_dataset = len(imageset)
