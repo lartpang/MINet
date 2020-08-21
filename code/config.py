@@ -40,8 +40,8 @@ arg_config = {
         ),
     },
     # 训练过程中的监控信息
-    "tb_update": 10,  # >0 则使用tensorboard
-    "print_freq": 10,  # >0, 保存迭代过程中的信息
+    "tb_update": 50,  # >0 则使用tensorboard
+    "print_freq": 50,  # >0, 保存迭代过程中的信息
     # img_prefix, gt_prefix，用在使用索引文件的时候的对应的扩展名
     "prefix": (".jpg", ".png"),
     # if you dont use the multi-scale training, you can set 'size_list': None

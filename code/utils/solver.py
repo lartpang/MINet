@@ -121,7 +121,6 @@ class Solver:
         else:
             # only train a new model.
             self.start_epoch = 0
-        return
 
     def train(self):
         for curr_epoch in range(self.start_epoch, self.end_epoch):
@@ -154,8 +153,9 @@ class Solver:
 
     @Timer
     def _train_per_epoch(self, curr_epoch, train_loss_record):
-        for train_batch_id, train_data in enumerate(self.tr_loader):
-            curr_iter = curr_epoch * len(self.tr_loader) + train_batch_id
+        for curr_iter_in_epoch, train_data in enumerate(self.tr_loader):
+            num_iter_per_epoch = len(self.tr_loader)
+            curr_iter = curr_epoch * num_iter_per_epoch + curr_iter_in_epoch
 
             self.opti.zero_grad()
 
@@ -200,10 +200,12 @@ class Solver:
                     [f"{param_groups['lr']:.7f}" for param_groups in self.opti.param_groups]
                 )
                 log = (
-                    f"[{curr_iter}:{self.iter_num}/{curr_epoch}:{self.end_epoch}]"
-                    f"[{self.exp_name}]"
-                    f"[Lr:{lr_str}]\n"
-                    f"[M:{train_loss_record.avg:.5f}|C:{train_iter_loss:.5f}]"
+                    f"{curr_iter_in_epoch}:{num_iter_per_epoch}/"
+                    f"{curr_iter}:{self.iter_num}/"
+                    f"{curr_epoch}:{self.end_epoch} "
+                    f"{self.exp_name}\n"
+                    f"Lr:{lr_str} "
+                    f"M:{train_loss_record.avg:.5f} C:{train_iter_loss:.5f} "
                     f"{loss_item_list}"
                 )
                 print(log)
