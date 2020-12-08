@@ -24,23 +24,19 @@ data_setting = dict(
 )
 
 arg_config = {
-    "model": "MINet_VGG16",  # 实际使用的模型，需要在`network/__init__.py`中导入
     "info": "",  # 关于本次实验的额外信息说明，这个会附加到本次试验的exp_name的结尾，如果为空，则不会附加内容。
-    "use_amp": False,  # 是否使用amp加速训练
     "resume_mode": "",  # the mode for resume parameters: ['train', 'test', '']
+    "model": "MINet_VGG16",  # 实际使用的模型，需要在`network/__init__.py`中导入
+    "use_amp": False,  # 是否使用amp加速训练
     "use_aux_loss": True,  # 是否使用辅助损失
     "save_pre": True,  # 是否保留最终的预测结果
     "epoch_num": 50,  # 训练周期, 0: directly test model
     "lr": 0.001,  # 微调时缩小100倍
-    # 数据集设置
     "data": data_setting,
-    # 训练过程中的监控信息
-    "print_freq": 50,  # >0, 保存迭代过程中的信息
-    # img_prefix, gt_prefix，用在使用索引文件的时候的对应的扩展名
-    "extra_scales": [0.8, 1.1],
+    "print_freq": 50,  # >0, 打印病保存迭代过程中的信息
     "ms_training": True,  # 是否使用多尺度训练
+    "extra_scales": [0.8, 1.1],
     "reduction": "mean",  # 损失处理的方式，可选“mean”和“sum”
-    # 优化器与学习率衰减
     "optim": "sgd_trick",  # 自定义部分的学习率
     "weight_decay": 5e-4,  # 微调时设置为0.0001
     "momentum": 0.9,
