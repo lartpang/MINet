@@ -1,21 +1,20 @@
+# -*- coding: utf-8 -*-
 import os
 
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim.optimizer as optim
 import torch.optim.lr_scheduler as sche
-import numpy as np
-from torch.optim import Adam, SGD
+import torch.optim.optimizer as optim
+from torch.optim import SGD, Adam
 
-from utils.misc import construct_print
+from utils import construct_print
 
 
-def get_total_loss(
-    train_preds: torch.Tensor, train_masks: torch.Tensor, loss_funcs: list
-) -> (float, list):
+def get_total_loss(train_preds: torch.Tensor, train_masks: torch.Tensor, loss_funcs: list) -> (float, list):
     """
     return the sum of the list of loss functions with train_preds and train_masks
-    
+
     Args:
         train_preds (torch.Tensor): predictions
         train_masks (torch.Tensor): masks
@@ -120,18 +119,14 @@ def resume_checkpoint(
                     construct_print("You are not using amp.")
             else:
                 construct_print("The state_dict of amp is None.")
-            construct_print(
-                f"Loaded '{load_path}' " f"(will train at epoch" f" {checkpoint['epoch']})"
-            )
+            construct_print(f"Loaded '{load_path}' " f"(will train at epoch" f" {checkpoint['epoch']})")
             return start_epoch
         elif mode == "onlynet":
             if hasattr(model, "module"):
                 model.module.load_state_dict(checkpoint)
             else:
                 model.load_state_dict(checkpoint)
-            construct_print(
-                f"Loaded checkpoint '{load_path}' " f"(only has the model's weight params)"
-            )
+            construct_print(f"Loaded checkpoint '{load_path}' " f"(only has the model's weight params)")
         else:
             raise NotImplementedError
     else:
@@ -182,18 +177,10 @@ def make_optimizer(model: nn.Module, optimizer_type: str, optimizer_info: dict) 
         # https://github.com/implus/PytorchInsight/blob/master/classification/imagenet_tricks.py
         params = [
             {
-                "params": [
-                    p for name, p in model.named_parameters() if ("bias" in name or "bn" in name)
-                ],
+                "params": [p for name, p in model.named_parameters() if ("bias" in name or "bn" in name)],
                 "weight_decay": 0,
             },
-            {
-                "params": [
-                    p
-                    for name, p in model.named_parameters()
-                    if ("bias" not in name and "bn" not in name)
-                ]
-            },
+            {"params": [p for name, p in model.named_parameters() if ("bias" not in name and "bn" not in name)]},
         ]
         optimizer = SGD(
             params,
@@ -208,15 +195,11 @@ def make_optimizer(model: nn.Module, optimizer_type: str, optimizer_info: dict) 
             # 层的参数（包括weight和bias）做约束（L2正则化会使得网络层的参数更加平滑）达
             # 到减少模型过拟合的效果。
             {
-                "params": [
-                    param for name, param in model.named_parameters() if name[-4:] == "bias"
-                ],
+                "params": [param for name, param in model.named_parameters() if name[-4:] == "bias"],
                 "lr": 2 * optimizer_info["lr"],
             },
             {
-                "params": [
-                    param for name, param in model.named_parameters() if name[-4:] != "bias"
-                ],
+                "params": [param for name, param in model.named_parameters() if name[-4:] != "bias"],
                 "lr": optimizer_info["lr"],
                 "weight_decay": optimizer_info["weight_decay"],
             },

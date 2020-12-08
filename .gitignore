@@ -1,8 +1,8 @@
 .vscode/
 .idea/
-/code/output/*
+/output/*
 # except for .gitkeep
-!/code/output/.gitkeep
+!/output/.gitkeep
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

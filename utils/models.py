@@ -1,11 +1,83 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2020/3/28
+# @Time    : 2020/12/8
 # @Author  : Lart Pang
-# @FileName: MyModule.py
 # @GitHub  : https://github.com/lartpang
-from torch import nn
 
-from utils.tensor_ops import cus_sample
+import torch
+from torch import nn
+from torch.nn.functional import interpolate
+from torchvision.models.resnet import resnet50
+from torchvision.models.vgg import vgg16_bn
+
+
+def cus_sample(feat, **kwargs):
+    """
+    :param feat: 输入特征
+    :param kwargs: size或者scale_factor
+    """
+    assert len(kwargs.keys()) == 1 and list(kwargs.keys())[0] in ["size", "scale_factor"]
+    return interpolate(feat, **kwargs, mode="bilinear", align_corners=False)
+
+
+def upsample_add(*xs):
+    y = xs[-1]
+    for x in xs[:-1]:
+        y = y + interpolate(x, size=y.size()[2:], mode="bilinear", align_corners=False)
+    return y
+
+
+def Backbone_ResNet50_in3():
+    net = resnet50(pretrained=True)
+    div_2 = nn.Sequential(*list(net.children())[:3])
+    div_4 = nn.Sequential(*list(net.children())[3:5])
+    div_8 = net.layer2
+    div_16 = net.layer3
+    div_32 = net.layer4
+
+    return div_2, div_4, div_8, div_16, div_32
+
+
+def Backbone_VGG16_in3():
+    net = vgg16_bn(pretrained=True, progress=True)
+    div_1 = nn.Sequential(*list(net.children())[0][0:6])
+    div_2 = nn.Sequential(*list(net.children())[0][6:13])
+    div_4 = nn.Sequential(*list(net.children())[0][13:23])
+    div_8 = nn.Sequential(*list(net.children())[0][23:33])
+    div_16 = nn.Sequential(*list(net.children())[0][33:43])
+    return div_1, div_2, div_4, div_8, div_16
+
+
+class BasicConv2d(nn.Module):
+    def __init__(
+        self,
+        in_planes,
+        out_planes,
+        kernel_size,
+        stride=1,
+        padding=0,
+        dilation=1,
+        groups=1,
+        bias=False,
+    ):
+        super(BasicConv2d, self).__init__()
+
+        self.basicconv = nn.Sequential(
+            nn.Conv2d(
+                in_planes,
+                out_planes,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+                bias=bias,
+            ),
+            nn.BatchNorm2d(out_planes),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x):
+        return self.basicconv(x)
 
 
 class SIM(nn.Module):
@@ -237,6 +309,123 @@ class AIM(nn.Module):
         return out_xs
 
 
+class MINet_VGG16(nn.Module):
+    def __init__(self):
+        super(MINet_VGG16, self).__init__()
+        self.upsample_add = upsample_add
+        self.upsample = cus_sample
+
+        (
+            self.encoder1,
+            self.encoder2,
+            self.encoder4,
+            self.encoder8,
+            self.encoder16,
+        ) = Backbone_VGG16_in3()
+
+        self.trans = AIM((64, 128, 256, 512, 512), (32, 64, 64, 64, 64))
+
+        self.sim16 = SIM(64, 32)
+        self.sim8 = SIM(64, 32)
+        self.sim4 = SIM(64, 32)
+        self.sim2 = SIM(64, 32)
+        self.sim1 = SIM(32, 16)
+
+        self.upconv16 = BasicConv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.upconv8 = BasicConv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.upconv4 = BasicConv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.upconv2 = BasicConv2d(64, 32, kernel_size=3, stride=1, padding=1)
+        self.upconv1 = BasicConv2d(32, 32, kernel_size=3, stride=1, padding=1)
+
+        self.classifier = nn.Conv2d(32, 1, 1)
+
+    def forward(self, in_data):
+        in_data_1 = self.encoder1(in_data)
+        in_data_2 = self.encoder2(in_data_1)
+        in_data_4 = self.encoder4(in_data_2)
+        in_data_8 = self.encoder8(in_data_4)
+        in_data_16 = self.encoder16(in_data_8)
+
+        in_data_1, in_data_2, in_data_4, in_data_8, in_data_16 = self.trans(
+            in_data_1, in_data_2, in_data_4, in_data_8, in_data_16
+        )
+
+        out_data_16 = self.upconv16(self.sim16(in_data_16) + in_data_16)  # 1024
+
+        out_data_8 = self.upsample_add(out_data_16, in_data_8)
+        out_data_8 = self.upconv8(self.sim8(out_data_8) + out_data_8)  # 512
+
+        out_data_4 = self.upsample_add(out_data_8, in_data_4)
+        out_data_4 = self.upconv4(self.sim4(out_data_4) + out_data_4)  # 256
+
+        out_data_2 = self.upsample_add(out_data_4, in_data_2)
+        out_data_2 = self.upconv2(self.sim2(out_data_2) + out_data_2)  # 64
+
+        out_data_1 = self.upsample_add(out_data_2, in_data_1)
+        out_data_1 = self.upconv1(self.sim1(out_data_1) + out_data_1)  # 32
+
+        out_data = self.classifier(out_data_1)
+
+        return out_data
+
+
+class MINet_Res50(nn.Module):
+    def __init__(self):
+        super(MINet_Res50, self).__init__()
+        self.div_2, self.div_4, self.div_8, self.div_16, self.div_32 = Backbone_ResNet50_in3()
+
+        self.upsample_add = upsample_add
+        self.upsample = cus_sample
+
+        self.trans = AIM(iC_list=(64, 256, 512, 1024, 2048), oC_list=(64, 64, 64, 64, 64))
+
+        self.sim32 = SIM(64, 32)
+        self.sim16 = SIM(64, 32)
+        self.sim8 = SIM(64, 32)
+        self.sim4 = SIM(64, 32)
+        self.sim2 = SIM(64, 32)
+
+        self.upconv32 = BasicConv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.upconv16 = BasicConv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.upconv8 = BasicConv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.upconv4 = BasicConv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.upconv2 = BasicConv2d(64, 32, kernel_size=3, stride=1, padding=1)
+        self.upconv1 = BasicConv2d(32, 32, kernel_size=3, stride=1, padding=1)
+
+        self.classifier = nn.Conv2d(32, 1, 1)
+
+    def forward(self, in_data):
+        in_data_2 = self.div_2(in_data)
+        in_data_4 = self.div_4(in_data_2)
+        in_data_8 = self.div_8(in_data_4)
+        in_data_16 = self.div_16(in_data_8)
+        in_data_32 = self.div_32(in_data_16)
+
+        in_data_2, in_data_4, in_data_8, in_data_16, in_data_32 = self.trans(
+            in_data_2, in_data_4, in_data_8, in_data_16, in_data_32
+        )
+
+        out_data_32 = self.upconv32(self.sim32(in_data_32) + in_data_32)  # 1024
+
+        out_data_16 = self.upsample_add(out_data_32, in_data_16)  # 1024
+        out_data_16 = self.upconv16(self.sim16(out_data_16) + out_data_16)
+
+        out_data_8 = self.upsample_add(out_data_16, in_data_8)
+        out_data_8 = self.upconv8(self.sim8(out_data_8) + out_data_8)  # 512
+
+        out_data_4 = self.upsample_add(out_data_8, in_data_4)
+        out_data_4 = self.upconv4(self.sim4(out_data_4) + out_data_4)  # 256
+
+        out_data_2 = self.upsample_add(out_data_4, in_data_2)
+        out_data_2 = self.upconv2(self.sim2(out_data_2) + out_data_2)  # 64
+
+        out_data_1 = self.upconv1(self.upsample(out_data_2, scale_factor=2))  # 32
+        out_data = self.classifier(out_data_1)
+
+        return out_data
+
+
 if __name__ == "__main__":
-    module = SIM(h_C=128, l_C=64)
-    print([(name, params.size()) for name, params in module.named_parameters()])
+    in_data = torch.randn((1, 3, 320, 320))
+    net = MINet_VGG16()
+    print(sum([x.nelement() for x in net.parameters()]))

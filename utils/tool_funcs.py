@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# @Time    : 2020/12/8
+# @Author  : Lart Pang
+# @GitHub  : https://github.com/lartpang
+
 import os
 import random
 from collections import OrderedDict
@@ -72,7 +77,7 @@ def construct_print(out_str: str, total_length: int = 80):
     print(out_str)
 
 
-def construct_path(proj_root: str, exp_name: str, xlsx_name: str) -> dict:
+def construct_path(proj_root: str, exp_name: str) -> dict:
     ckpt_path = os.path.join(proj_root, "output")
 
     pth_log_path = os.path.join(ckpt_path, exp_name)
@@ -80,14 +85,13 @@ def construct_path(proj_root: str, exp_name: str, xlsx_name: str) -> dict:
     save_path = os.path.join(pth_log_path, "pre")
     pth_path = os.path.join(pth_log_path, "pth")
 
-    final_full_model_path = os.path.join(pth_path, "checkpoint_final.pth.tar")
+    final_full_model_path = os.path.join(pth_path, "checkpoint_final.pth")
     final_state_path = os.path.join(pth_path, "state_final.pth")
 
     tr_log_path = os.path.join(pth_log_path, f"tr_{str(datetime.now())[:10]}.txt")
     te_log_path = os.path.join(pth_log_path, f"te_{str(datetime.now())[:10]}.txt")
     cfg_log_path = os.path.join(pth_log_path, f"cfg_{str(datetime.now())[:10]}.txt")
     trainer_log_path = os.path.join(pth_log_path, f"trainer_{str(datetime.now())[:10]}.txt")
-    xlsx_path = os.path.join(ckpt_path, xlsx_name)
 
     path_config = {
         "ckpt_path": ckpt_path,
@@ -101,7 +105,6 @@ def construct_path(proj_root: str, exp_name: str, xlsx_name: str) -> dict:
         "te_log": te_log_path,
         "cfg_log": cfg_log_path,
         "trainer_log": trainer_log_path,
-        "xlsx": xlsx_path,
     }
     return path_config
 
@@ -147,9 +150,3 @@ def construct_exp_name(arg_dict: dict):
             item = item.lower()
         exp_name += f"_{v.upper()}{item}"
     return exp_name
-
-
-if __name__ == "__main__":
-    print("=" * 8)
-    out_str = "lartpang"
-    construct_print(out_str, total_length=8)

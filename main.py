@@ -1,21 +1,20 @@
+# -*- coding: utf-8 -*-
 import os
+import shutil
+from datetime import datetime
 from pprint import pprint
 
 import numpy as np
 import torch
 from PIL import Image
-from torchvision import transforms
+from torch import nn
+from torchvision.transforms.functional import to_pil_image
 from tqdm import tqdm
 
-import network as network_lib
-from loss.CEL import CEL
+import utils.models as network_lib
+from config import arg_config, proj_root
 from utils.dataloader import create_loader
-from utils.metric import cal_maxf, cal_pr_mae_meanf
-from utils.misc import (
-    AvgMeter,
-    construct_print,
-    write_data_to_file,
-)
+from utils.metrics import MAE, Emeasure, Fmeasure, Smeasure, WeightedFmeasure
 from utils.pipeline_ops import (
     get_total_loss,
     make_optimizer,
@@ -23,7 +22,71 @@ from utils.pipeline_ops import (
     resume_checkpoint,
     save_checkpoint,
 )
-from utils.recorder import TBRecorder, Timer, XLSXRecoder
+from utils.tool_funcs import (
+    AvgMeter,
+    construct_exp_name,
+    construct_path,
+    construct_print,
+    pre_mkdir,
+    set_seed,
+    write_data_to_file,
+)
+
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+class CalTotalMetric(object):
+    def __init__(self):
+        self.cal_mae = MAE()
+        self.cal_fm = Fmeasure()
+        self.cal_sm = Smeasure()
+        self.cal_em = Emeasure()
+        self.cal_wfm = WeightedFmeasure()
+
+    def step(self, pred: np.ndarray, gt: np.ndarray, gt_path: str):
+        assert pred.ndim == gt.ndim and pred.shape == gt.shape, (pred.shape, gt.shape, gt_path)
+        assert pred.dtype == np.uint8, pred.dtype
+        assert gt.dtype == np.uint8, gt.dtype
+
+        self.cal_mae.step(pred, gt)
+        self.cal_fm.step(pred, gt)
+        self.cal_sm.step(pred, gt)
+        self.cal_em.step(pred, gt)
+        self.cal_wfm.step(pred, gt)
+
+    def get_results(self, bit_width: int = 3) -> dict:
+        fm = self.cal_fm.get_results()["fm"]
+        wfm = self.cal_wfm.get_results()["wfm"]
+        sm = self.cal_sm.get_results()["sm"]
+        em = self.cal_em.get_results()["em"]
+        mae = self.cal_mae.get_results()["mae"]
+        results = {
+            "Smeasure": sm,
+            "wFmeasure": wfm,
+            "MAE": mae,
+            "adpEm": em["adp"],
+            "meanEm": em["curve"].mean(),
+            "maxEm": em["curve"].max(),
+            "adpFm": fm["adp"],
+            "meanFm": fm["curve"].mean(),
+            "maxFm": fm["curve"].max(),
+        }
+        results = {name: metric.round(bit_width) for name, metric in results.items()}
+        return results
+
+
+class CEL(nn.Module):
+    def __init__(self):
+        super(CEL, self).__init__()
+        print("You are using `CEL`!")
+        self.eps = 1e-6
+
+    def forward(self, pred, target):
+        pred = pred.sigmoid()
+        intersection = pred * target
+        numerator = (pred - intersection).sum() + (target - intersection).sum()
+        denominator = pred.sum() + target.sum()
+        return numerator / (denominator + self.eps)
 
 
 class Solver:
@@ -33,33 +96,21 @@ class Solver:
         self.arg_dict = arg_dict
         self.path_dict = path_dict
 
-        self.dev = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.to_pil = transforms.ToPILImage()
-
-        self.tr_data_path = self.arg_dict["rgb_data"]["tr_data_path"]
-        self.te_data_list = self.arg_dict["rgb_data"]["te_data_list"]
-
-        self.save_path = self.path_dict["save"]
-        self.save_pre = self.arg_dict["save_pre"]
-
-        if self.arg_dict["tb_update"] > 0:
-            self.tb_recorder = TBRecorder(tb_path=self.path_dict["tb"])
-        if self.arg_dict["xlsx_name"]:
-            self.xlsx_recorder = XLSXRecoder(xlsx_path=self.path_dict["xlsx"])
-
         # 依赖与前面属性的属性
         self.tr_loader = create_loader(
-            data_path=self.tr_data_path,
             training=True,
+            data_info=self.arg_dict["data"]["tr"],
+            in_size=self.arg_dict["in_size"],
+            use_bigt=self.arg_dict["use_bigt"],
+            batch_size=self.arg_dict["batch_size"],
+            num_workers=self.arg_dict["num_workers"],
             size_list=self.arg_dict["size_list"],
-            prefix=self.arg_dict["prefix"],
-            get_length=False,
         )
         self.end_epoch = self.arg_dict["epoch_num"]
         self.iter_num = self.end_epoch * len(self.tr_loader)
 
         if hasattr(network_lib, self.arg_dict["model"]):
-            self.net = getattr(network_lib, self.arg_dict["model"])().to(self.dev)
+            self.net = getattr(network_lib, self.arg_dict["model"])().to(DEVICE)
         else:
             raise AttributeError
         pprint(self.arg_dict)
@@ -68,15 +119,15 @@ class Solver:
             # resume model only to test model.
             # self.start_epoch is useless
             resume_checkpoint(
-                model=self.net, load_path=self.path_dict["final_state_net"], mode="onlynet",
+                model=self.net,
+                load_path=self.path_dict["final_state_net"],
+                mode="onlynet",
             )
             return
 
-        self.loss_funcs = [
-            torch.nn.BCEWithLogitsLoss(reduction=self.arg_dict["reduction"]).to(self.dev)
-        ]
+        self.loss_funcs = [torch.nn.BCEWithLogitsLoss(reduction=self.arg_dict["reduction"]).to(DEVICE)]
         if self.arg_dict["use_aux_loss"]:
-            self.loss_funcs.append(CEL().to(self.dev))
+            self.loss_funcs.append(CEL().to(DEVICE))
 
         self.opti = make_optimizer(
             model=self.net,
@@ -92,9 +143,7 @@ class Solver:
             optimizer=self.opti,
             total_num=self.iter_num if self.arg_dict["sche_usebatch"] else self.end_epoch,
             scheduler_type=self.arg_dict["lr_type"],
-            scheduler_info=dict(
-                lr_decay=self.arg_dict["lr_decay"], warmup_epoch=self.arg_dict["warmup_epoch"]
-            ),
+            scheduler_info=dict(lr_decay=self.arg_dict["lr_decay"], warmup_epoch=self.arg_dict["warmup_epoch"]),
         )
 
         # AMP
@@ -151,7 +200,6 @@ class Solver:
         else:
             self.test()
 
-    @Timer
     def _train_per_epoch(self, curr_epoch, train_loss_record):
         for curr_iter_in_epoch, train_data in enumerate(self.tr_loader):
             num_iter_per_epoch = len(self.tr_loader)
@@ -160,8 +208,8 @@ class Solver:
             self.opti.zero_grad()
 
             train_inputs, train_masks, _ = train_data
-            train_inputs = train_inputs.to(self.dev, non_blocking=True)
-            train_masks = train_masks.to(self.dev, non_blocking=True)
+            train_inputs = train_inputs.to(DEVICE, non_blocking=True)
+            train_masks = train_masks.to(DEVICE, non_blocking=True)
             train_preds = self.net(train_inputs)
 
             train_loss, loss_item_list = get_total_loss(train_preds, train_masks, self.loss_funcs)
@@ -180,33 +228,13 @@ class Solver:
             train_batch_size = train_inputs.size(0)
             train_loss_record.update(train_iter_loss, train_batch_size)
 
-            # 显示tensorboard
-            if (
-                self.arg_dict["tb_update"] > 0
-                and (curr_iter + 1) % self.arg_dict["tb_update"] == 0
-            ):
-                self.tb_recorder.record_curve("trloss_avg", train_loss_record.avg, curr_iter)
-                self.tb_recorder.record_curve("trloss_iter", train_iter_loss, curr_iter)
-                self.tb_recorder.record_curve("lr", self.opti.param_groups, curr_iter)
-                self.tb_recorder.record_image("trmasks", train_masks, curr_iter)
-                self.tb_recorder.record_image("trsodout", train_preds.sigmoid(), curr_iter)
-                self.tb_recorder.record_image("trsodin", train_inputs, curr_iter)
             # 记录每一次迭代的数据
-            if (
-                self.arg_dict["print_freq"] > 0
-                and (curr_iter + 1) % self.arg_dict["print_freq"] == 0
-            ):
-                lr_str = ",".join(
-                    [f"{param_groups['lr']:.7f}" for param_groups in self.opti.param_groups]
-                )
+            if self.arg_dict["print_freq"] > 0 and (curr_iter + 1) % self.arg_dict["print_freq"] == 0:
+                lr_str = ",".join([f"{param_groups['lr']:.7f}" for param_groups in self.opti.param_groups])
                 log = (
-                    f"{curr_iter_in_epoch}:{num_iter_per_epoch}/"
-                    f"{curr_iter}:{self.iter_num}/"
-                    f"{curr_epoch}:{self.end_epoch} "
-                    f"{self.exp_name}\n"
-                    f"Lr:{lr_str} "
-                    f"M:{train_loss_record.avg:.5f} C:{train_iter_loss:.5f} "
-                    f"{loss_item_list}"
+                    f"{curr_iter_in_epoch}:{num_iter_per_epoch}/{curr_iter}:{self.iter_num}/"
+                    f"{curr_epoch}:{self.end_epoch} {self.exp_name}\nLr:{lr_str} "
+                    f"M:{train_loss_record.avg:.5f} C:{train_iter_loss:.5f} {loss_item_list}"
                 )
                 print(log)
                 write_data_to_file(log, self.path_dict["tr_log"])
@@ -215,20 +243,22 @@ class Solver:
         self.net.eval()
 
         total_results = {}
-        for data_name, data_path in self.te_data_list.items():
+        for data_name, data_info in self.arg_dict["data"]["te"].items():
             construct_print(f"Testing with testset: {data_name}")
             self.te_loader = create_loader(
-                data_path=data_path,
                 training=False,
-                prefix=self.arg_dict["prefix"],
-                get_length=False,
+                data_info=data_info,
+                in_size=self.arg_dict["in_size"],
+                use_bigt=self.arg_dict["use_bigt"],
+                batch_size=self.arg_dict["batch_size"],
+                num_workers=self.arg_dict["num_workers"],
             )
-            self.save_path = os.path.join(self.path_dict["save"], data_name)
-            if not os.path.exists(self.save_path):
-                construct_print(f"{self.save_path} do not exist. Let's create it.")
-                os.makedirs(self.save_path)
-            results = self._test_process(save_pre=self.save_pre)
-            msg = f"Results on the testset({data_name}:'{data_path}'): {results}"
+            save_path = os.path.join(self.path_dict["save"], data_name)
+            if not os.path.exists(save_path):
+                construct_print(f"{save_path} do not exist. Let's create it.")
+                os.makedirs(save_path)
+            results = self._test_process(save_pre=self.arg_dict["save_pre"], save_path=save_path)
+            msg = f"Results on the testset({data_name}:'{data_info['root']}'): {results}"
             construct_print(msg)
             write_data_to_file(msg, self.path_dict["te_log"])
 
@@ -236,24 +266,17 @@ class Solver:
 
         self.net.train()
 
-        if self.arg_dict["xlsx_name"]:
-            # save result into xlsx file.
-            self.xlsx_recorder.write_xlsx(self.exp_name, total_results)
-
-    def _test_process(self, save_pre):
+    def _test_process(self, save_pre, save_path):
         loader = self.te_loader
 
-        pres = [AvgMeter() for _ in range(256)]
-        recs = [AvgMeter() for _ in range(256)]
-        meanfs = AvgMeter()
-        maes = AvgMeter()
+        cal_total_seg_metrics = CalTotalMetric()
 
         tqdm_iter = tqdm(enumerate(loader), total=len(loader), leave=False)
         for test_batch_id, test_data in tqdm_iter:
             tqdm_iter.set_description(f"{self.exp_name}: te=>{test_batch_id + 1}")
             with torch.no_grad():
                 in_imgs, in_mask_paths, in_names = test_data
-                in_imgs = in_imgs.to(self.dev, non_blocking=True)
+                in_imgs = in_imgs.to(DEVICE, non_blocking=True)
                 outputs = self.net(in_imgs)
 
             outputs_np = outputs.sigmoid().cpu().detach()
@@ -261,21 +284,38 @@ class Solver:
             for item_id, out_item in enumerate(outputs_np):
                 gimg_path = os.path.join(in_mask_paths[item_id])
                 gt_img = Image.open(gimg_path).convert("L")
-                out_img = self.to_pil(out_item).resize(gt_img.size, resample=Image.NEAREST)
+                out_img = to_pil_image(out_item).resize(gt_img.size, resample=Image.NEAREST)
 
                 if save_pre:
-                    oimg_path = os.path.join(self.save_path, in_names[item_id] + ".png")
+                    oimg_path = os.path.join(save_path, in_names[item_id] + ".png")
                     out_img.save(oimg_path)
 
-                gt_img = np.array(gt_img)
-                out_img = np.array(out_img)
-                ps, rs, mae, meanf = cal_pr_mae_meanf(out_img, gt_img)
-                for pidx, pdata in enumerate(zip(ps, rs)):
-                    p, r = pdata
-                    pres[pidx].update(p)
-                    recs[pidx].update(r)
-                maes.update(mae)
-                meanfs.update(meanf)
-        maxf = cal_maxf([pre.avg for pre in pres], [rec.avg for rec in recs])
-        results = {"MAXF": maxf, "MEANF": meanfs.avg, "MAE": maes.avg}
-        return results
+                    gt_img = np.array(gt_img)
+                    out_img = np.array(out_img)
+                    cal_total_seg_metrics.step(pred=out_img, gt=gt_img, gt_path=gimg_path)
+            fixed_seg_results = cal_total_seg_metrics.get_results()
+            return fixed_seg_results
+
+
+if __name__ == "__main__":
+    construct_print(f"{datetime.now()}: Initializing...")
+    construct_print(f"Project Root: {proj_root}")
+    init_start = datetime.now()
+
+    exp_name = construct_exp_name(arg_config)
+    path_config = construct_path(proj_root=proj_root, exp_name=exp_name)
+    pre_mkdir(path_config)
+    set_seed(seed=0, use_cudnn_benchmark=arg_config["size_list"] is not None)
+
+    solver = Solver(exp_name, arg_config, path_config)
+    construct_print(f"Total initialization time：{datetime.now() - init_start}")
+
+    shutil.copy(f"{proj_root}/config.py", path_config["cfg_log"])
+    shutil.copy(f"{proj_root}/utils/solver.py", path_config["trainer_log"])
+
+    construct_print(f"{datetime.now()}: Start...")
+    if arg_config["resume_mode"] == "test":
+        solver.test()
+    else:
+        solver.train()
+    construct_print(f"{datetime.now()}: End...")
