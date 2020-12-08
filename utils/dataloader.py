@@ -8,7 +8,6 @@
 import os
 import random
 from collections import defaultdict
-from functools import partial
 
 import torch
 from PIL import Image
@@ -17,7 +16,7 @@ from torch.nn.functional import interpolate
 from torch.utils import data
 from torchvision import transforms
 
-from utils import construct_print
+from utils.tool_funcs import construct_print
 
 
 class Compose(object):
@@ -63,9 +62,14 @@ class RandomRotate(object):
 
 
 class ImageFolder(data.Dataset):
-    def __init__(self, root, in_size, training, use_bigt=False):
+    def __init__(self, root, in_size, extra_scales, training, use_bigt=False):
         self.training = training
         self.use_bigt = use_bigt
+
+        if isinstance(extra_scales, tuple):
+            extra_scales = list(extra_scales)
+        assert isinstance(extra_scales, list)
+        self.scales = [1] + extra_scales
 
         total_data = self.make_dataset(root)
         self.images = total_data["image"]
@@ -122,15 +126,16 @@ class ImageFolder(data.Dataset):
             dataset_info["mask"].append(os.path.join(mask_root, name_wo_ext + mask_ext))
         return dataset_info
 
-    @staticmethod
-    def collate_fn(batch, size_list):
-        size = random.choice(size_list)
-        image, mask, image_name = [list(item) for item in zip(*batch)]
+    def collate_fn(self, batch):
+        scale = random.choice(self.scales)
+        image, mask = [list(item) for item in zip(*batch)]
         image = torch.stack(image, dim=0)
-        image = interpolate(image, size=(size, size), mode="bilinear", align_corners=False)
+        image = interpolate(
+            image, scale_factor=scale, mode="bilinear", align_corners=False, recompute_scale_factor=False
+        )
         mask = torch.stack(mask, dim=0)
-        mask = interpolate(mask, size=(size, size), mode="nearest")
-        return image, mask, image_name
+        mask = interpolate(mask, scale_factor=scale, mode="nearest", recompute_scale_factor=False)
+        return image, mask
 
 
 class DataLoaderX(data.DataLoader):
@@ -138,9 +143,21 @@ class DataLoaderX(data.DataLoader):
         return BackgroundGenerator(super(DataLoaderX, self).__iter__())
 
 
-def create_loader(training, data_info, in_size, use_bigt, batch_size, num_workers=2, size_list=None, get_length=False):
+def create_loader(
+    training,
+    data_info,
+    in_size,
+    use_bigt,
+    batch_size,
+    num_workers=2,
+    ms_training=False,
+    extra_scales=None,
+    get_length=False,
+):
     construct_print(f"{['Test', 'Training'][training]} on: {data_info['root']}")
-    imageset = ImageFolder(root=data_info, in_size=in_size, training=training, use_bigt=use_bigt)
+    imageset = ImageFolder(
+        root=data_info, in_size=in_size, training=training, use_bigt=use_bigt, extra_scales=extra_scales
+    )
 
     loader_kwargs = dict(
         dataset=imageset,
@@ -150,8 +167,8 @@ def create_loader(training, data_info, in_size, use_bigt, batch_size, num_worker
         drop_last=training,
         pin_memory=True,
     )
-    if training and float(torch.__version__[:3]) >= 1.2:
-        loader_kwargs["collate_fn"] = partial(imageset.collate_fn, size_list=size_list)
+    if training and ms_training and float(torch.__version__[:3]) >= 1.2:
+        loader_kwargs["collate_fn"] = imageset.collate_fn
     loader = DataLoaderX(**loader_kwargs)
 
     if get_length:

@@ -104,7 +104,8 @@ class Solver:
             use_bigt=self.arg_dict["use_bigt"],
             batch_size=self.arg_dict["batch_size"],
             num_workers=self.arg_dict["num_workers"],
-            size_list=self.arg_dict["size_list"],
+            ms_training=self.arg_dict["ms_training"],
+            extra_scales=self.arg_dict["extra_scales"],
         )
         self.end_epoch = self.arg_dict["epoch_num"]
         self.iter_num = self.end_epoch * len(self.tr_loader)
@@ -172,9 +173,11 @@ class Solver:
             self.start_epoch = 0
 
     def train(self):
+        self.net.train()
+
         for curr_epoch in range(self.start_epoch, self.end_epoch):
-            train_loss_record = AvgMeter()
-            self._train_per_epoch(curr_epoch, train_loss_record)
+            loss_recorder = AvgMeter()
+            self._train_per_epoch(curr_epoch, loss_recorder)
 
             # 根据周期修改学习率
             if not self.arg_dict["sche_usebatch"]:
@@ -200,19 +203,18 @@ class Solver:
         else:
             self.test()
 
-    def _train_per_epoch(self, curr_epoch, train_loss_record):
-        for curr_iter_in_epoch, train_data in enumerate(self.tr_loader):
+    def _train_per_epoch(self, curr_epoch, loss_recorder):
+        for batch_id, batch in enumerate(self.tr_loader):
             num_iter_per_epoch = len(self.tr_loader)
-            curr_iter = curr_epoch * num_iter_per_epoch + curr_iter_in_epoch
+            curr_iter = curr_epoch * num_iter_per_epoch + batch_id
 
             self.opti.zero_grad()
 
-            train_inputs, train_masks, _ = train_data
-            train_inputs = train_inputs.to(DEVICE, non_blocking=True)
-            train_masks = train_masks.to(DEVICE, non_blocking=True)
-            train_preds = self.net(train_inputs)
+            images = batch[0].to(DEVICE, non_blocking=True)
+            masks = batch[1].to(DEVICE, non_blocking=True)
+            seg_logits = self.net(images)
 
-            train_loss, loss_item_list = get_total_loss(train_preds, train_masks, self.loss_funcs)
+            train_loss, loss_item_list = get_total_loss(seg_logits, masks, self.loss_funcs)
             if self.amp:
                 with self.amp.scale_loss(train_loss, self.opti) as scaled_loss:
                     scaled_loss.backward()
@@ -224,17 +226,16 @@ class Solver:
                 self.sche.step()
 
             # 仅在累计的时候使用item()获取数据
-            train_iter_loss = train_loss.item()
-            train_batch_size = train_inputs.size(0)
-            train_loss_record.update(train_iter_loss, train_batch_size)
+            loss_iter = train_loss.item()
+            loss_recorder.update(loss_iter, images.size(0))
 
             # 记录每一次迭代的数据
             if self.arg_dict["print_freq"] > 0 and (curr_iter + 1) % self.arg_dict["print_freq"] == 0:
                 lr_str = ",".join([f"{param_groups['lr']:.7f}" for param_groups in self.opti.param_groups])
                 log = (
-                    f"{curr_iter_in_epoch}:{num_iter_per_epoch}/{curr_iter}:{self.iter_num}/"
-                    f"{curr_epoch}:{self.end_epoch} {self.exp_name}\nLr:{lr_str} "
-                    f"M:{train_loss_record.avg:.5f} C:{train_iter_loss:.5f} {loss_item_list}"
+                    f"{batch_id}:{num_iter_per_epoch}/{curr_iter}:{self.iter_num}/"
+                    f"{curr_epoch}:{self.end_epoch} {self.exp_name} {list(images.size())}\nLr:{lr_str} "
+                    f"M:{loss_recorder.avg:.5f} C:{loss_iter:.5f} {loss_item_list}"
                 )
                 print(log)
                 write_data_to_file(log, self.path_dict["tr_log"])
@@ -242,10 +243,9 @@ class Solver:
     def test(self):
         self.net.eval()
 
-        total_results = {}
         for data_name, data_info in self.arg_dict["data"]["te"].items():
             construct_print(f"Testing with testset: {data_name}")
-            self.te_loader = create_loader(
+            te_loader = create_loader(
                 training=False,
                 data_info=data_info,
                 in_size=self.arg_dict["in_size"],
@@ -257,44 +257,39 @@ class Solver:
             if not os.path.exists(save_path):
                 construct_print(f"{save_path} do not exist. Let's create it.")
                 os.makedirs(save_path)
-            results = self._test_process(save_pre=self.arg_dict["save_pre"], save_path=save_path)
+            results = self._test_process(loader=te_loader, save_pre=self.arg_dict["save_pre"], save_path=save_path)
             msg = f"Results on the testset({data_name}:'{data_info['root']}'): {results}"
             construct_print(msg)
             write_data_to_file(msg, self.path_dict["te_log"])
 
-            total_results[data_name] = results
-
-        self.net.train()
-
-    def _test_process(self, save_pre, save_path):
-        loader = self.te_loader
-
+    def _test_process(self, loader, save_pre, save_path):
         cal_total_seg_metrics = CalTotalMetric()
 
-        tqdm_iter = tqdm(enumerate(loader), total=len(loader), leave=False)
-        for test_batch_id, test_data in tqdm_iter:
-            tqdm_iter.set_description(f"{self.exp_name}: te=>{test_batch_id + 1}")
+        tqdm_iter = tqdm(enumerate(loader), total=len(loader), leave=False, ncols=79)
+        for batch_id, batch in tqdm_iter:
+            tqdm_iter.set_description(f"{self.exp_name}: te=>{batch_id + 1}")
+
+            in_data = batch[0].to(DEVICE, non_blocking=True)
             with torch.no_grad():
-                in_imgs, in_mask_paths, in_names = test_data
-                in_imgs = in_imgs.to(DEVICE, non_blocking=True)
-                outputs = self.net(in_imgs)
+                outputs = self.net(in_data)
 
             outputs_np = outputs.sigmoid().cpu().detach()
 
+            in_mask_paths = batch[1]
             for item_id, out_item in enumerate(outputs_np):
-                gimg_path = os.path.join(in_mask_paths[item_id])
-                gt_img = Image.open(gimg_path).convert("L")
-                out_img = to_pil_image(out_item).resize(gt_img.size, resample=Image.NEAREST)
+                gt_path = os.path.join(in_mask_paths[item_id])
+                gt_image = Image.open(gt_path).convert("L")
+                out_img = to_pil_image(out_item).resize(gt_image.size, resample=Image.NEAREST)
 
                 if save_pre:
-                    oimg_path = os.path.join(save_path, in_names[item_id] + ".png")
+                    oimg_path = os.path.join(save_path, os.path.basename(gt_path))
                     out_img.save(oimg_path)
 
-                    gt_img = np.array(gt_img)
-                    out_img = np.array(out_img)
-                    cal_total_seg_metrics.step(pred=out_img, gt=gt_img, gt_path=gimg_path)
-            fixed_seg_results = cal_total_seg_metrics.get_results()
-            return fixed_seg_results
+                gt_array = np.array(gt_image)
+                out_array = np.array(out_img)
+                cal_total_seg_metrics.step(pred=out_array, gt=gt_array, gt_path=gt_path)
+        fixed_seg_results = cal_total_seg_metrics.get_results()
+        return fixed_seg_results
 
 
 if __name__ == "__main__":
@@ -305,13 +300,13 @@ if __name__ == "__main__":
     exp_name = construct_exp_name(arg_config)
     path_config = construct_path(proj_root=proj_root, exp_name=exp_name)
     pre_mkdir(path_config)
-    set_seed(seed=0, use_cudnn_benchmark=arg_config["size_list"] is not None)
+    set_seed(seed=0, use_cudnn_benchmark=not arg_config["ms_training"])
 
     solver = Solver(exp_name, arg_config, path_config)
     construct_print(f"Total initialization time：{datetime.now() - init_start}")
 
     shutil.copy(f"{proj_root}/config.py", path_config["cfg_log"])
-    shutil.copy(f"{proj_root}/utils/solver.py", path_config["trainer_log"])
+    shutil.copy(f"{proj_root}/main.py", path_config["trainer_log"])
 
     construct_print(f"{datetime.now()}: Start...")
     if arg_config["resume_mode"] == "test":

@@ -37,9 +37,8 @@ arg_config = {
     # 训练过程中的监控信息
     "print_freq": 50,  # >0, 保存迭代过程中的信息
     # img_prefix, gt_prefix，用在使用索引文件的时候的对应的扩展名
-    # if you dont use the multi-scale training, you can set 'size_list': None
-    # "size_list": [224, 256, 288, 320, 352],
-    "size_list": None,  # 不使用多尺度训练
+    "extra_scales": [0.8, 1.1],
+    "ms_training": True,  # 是否使用多尺度训练
     "reduction": "mean",  # 损失处理的方式，可选“mean”和“sum”
     # 优化器与学习率衰减
     "optim": "sgd_trick",  # 自定义部分的学习率
@@ -54,5 +53,5 @@ arg_config = {
     "use_bigt": True,  # 训练时是否对真值二值化（阈值为0.5）
     "batch_size": 4,  # 要是继续训练, 最好使用相同的batchsize
     "num_workers": 4,  # 不要太大, 不然运行多个程序同时训练的时候, 会造成数据读入速度受影响
-    "input_size": 320,
+    "in_size": 320,
 }

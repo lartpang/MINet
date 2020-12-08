@@ -16,13 +16,13 @@ def cus_sample(feat, **kwargs):
     :param kwargs: size或者scale_factor
     """
     assert len(kwargs.keys()) == 1 and list(kwargs.keys())[0] in ["size", "scale_factor"]
-    return interpolate(feat, **kwargs, mode="bilinear", align_corners=False)
+    return interpolate(feat, **kwargs, mode="bilinear", align_corners=False, recompute_scale_factor=False)
 
 
 def upsample_add(*xs):
     y = xs[-1]
     for x in xs[:-1]:
-        y = y + interpolate(x, size=y.size()[2:], mode="bilinear", align_corners=False)
+        y = y + interpolate(x, size=y.size()[2:], mode="bilinear", align_corners=False, recompute_scale_factor=False)
     return y
 
 

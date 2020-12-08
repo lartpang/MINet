@@ -8,7 +8,7 @@ import torch.optim.lr_scheduler as sche
 import torch.optim.optimizer as optim
 from torch.optim import SGD, Adam
 
-from utils import construct_print
+from utils.tool_funcs import construct_print
 
 
 def get_total_loss(train_preds: torch.Tensor, train_masks: torch.Tensor, loss_funcs: list) -> (float, list):

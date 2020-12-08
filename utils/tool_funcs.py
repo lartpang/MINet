@@ -2,7 +2,7 @@
 # @Time    : 2020/12/8
 # @Author  : Lart Pang
 # @GitHub  : https://github.com/lartpang
-
+import copy
 import os
 import random
 from collections import OrderedDict
@@ -110,14 +110,15 @@ def construct_path(proj_root: str, exp_name: str) -> dict:
 
 
 def construct_exp_name(arg_dict: dict):
+    arg_dict = copy.deepcopy(arg_dict)
+
     # If you know the function of these two lines, you can uncomment out them.
     # if arg_dict.get("special_name", None):
     #     return arg_dict["special_name"].replace("@", "_")
-
     # You can modify and supplement it according to your needs.
     focus_item = OrderedDict(
         {
-            "input_size": "s",
+            "in_size": "s",
             "batch_size": "bs",
             "epoch_num": "e",
             "warmup_epoch": "we",
@@ -127,7 +128,7 @@ def construct_exp_name(arg_dict: dict):
             "optim": "ot",
             "use_aux_loss": "al",
             "use_bigt": "bi",
-            "size_list": "ms",
+            "ms_training": "ms",
             "info": "info",
         }
     )
@@ -143,7 +144,7 @@ def construct_exp_name(arg_dict: dict):
                 continue
             if "_" in item:
                 item = item.replace("_", "")
-        elif item == None:
+        elif item is None:
             item = "N"
 
         if isinstance(item, str):
