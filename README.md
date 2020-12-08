@@ -7,7 +7,7 @@
 [![CVPR Page](https://img.shields.io/badge/CVPR%202020-MINet-blue?style=flat-square)](https://openaccess.thecvf.com/content_CVPR_2020/html/Pang_Multi-Scale_Interactive_Network_for_Salient_Object_Detection_CVPR_2020_paper.html)
 [![Arxiv Page](https://img.shields.io/badge/Arxiv-2007.09062-red?style=flat-square)](https://arxiv.org/abs/2007.09062)
 
-CVPR 2020. 
+CVPR 2020.
 
 **NONE**: For subsequent updates of the paper, please see the arixv version.
 
@@ -15,18 +15,22 @@ CVPR 2020.
 
 The code and experimental results have be released now :smile:.
 
+* 2020/12/08:
+    * Simplify the code structure.
+    * Add a simple version to the `simpler` branch, but I have no time to test it. So, if you find any bugs, you can create an issue.
+    * Add the pre-commit hook to format the code before the commit.
 * 2020/7/23:
     * [X] Improve and simplify the configuration of the project.
     * [X] Introduce the support of [`Amp: Automatic Mixed Precision`](https://github.com/NVIDIA/apex). ([Quick Start](https://github.com/NVIDIA/apex#linux))
-    * [X] Confirm the correctness of the function of saving and resuming the checkpoint. 
-        * [X] The training was interrupted. 
-        * [X] Training from scratch. 
+    * [X] Confirm the correctness of the function of saving and resuming the checkpoint.
+        * [X] The training was interrupted.
+        * [X] Training from scratch.
         * [X] Test only.
     * [X] Confirm the correctness of the function of exporting xlsx.
 * 2020/7/16:
     * Fix the mistake pointed out by @sjf18 in our code for testing FPS, which will be corrected in the later version of the paper.
 * 2020/7/14:
-    * The actual interpolation method is pointed out. 
+    * The actual interpolation method is pointed out.
     * Modify the mode of `F.interpolate` in SIM from `scale_factor` to `size`.
 * 2020/6/21: Some useful modifications.
     * I optimized the testing process. For details, you can see `code/readme.md`.
