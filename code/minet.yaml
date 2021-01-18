@@ -73,4 +73,3 @@ dependencies:
     - urllib3==1.25.9
     - werkzeug==1.0.1
 prefix: /home/lart/miniconda3/envs/minet_only
-

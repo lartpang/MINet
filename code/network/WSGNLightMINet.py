@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
 from backbone.wsgn.from_wsgn import Backbone_ResNet50_in3
 from module.BaseBlocks import BasicConv2d
-from module.MyLightModule import LightAIM, SIM
+from module.MyLightModule import SIM, LightAIM
 from utils.tensor_ops import cus_sample, upsample_add
 
 
@@ -87,27 +88,27 @@ class CPLMINet_WSGNRes50(nn.Module):
         return in_data_2, in_data_4, in_data_8, in_data_16, in_data_32
 
     def checkpoint_de_32(self, in_data_32):
-        out_data_32 = self.upconv32(self.sim32(in_data_32) + in_data_32)  # 1024
+        out_data_32 = self.upconv32(self.sim32(in_data_32))  # 1024
         return out_data_32
 
     def checkpoint_de_16(self, in_data_16, out_data_32):
         out_data_16 = self.upsample_add(out_data_32, in_data_16)  # 1024
-        out_data_16 = self.upconv16(self.sim16(out_data_16) + out_data_16)
+        out_data_16 = self.upconv16(self.sim16(out_data_16))
         return out_data_16
 
     def checkpoint_de_8(self, in_data_8, out_data_16):
         out_data_8 = self.upsample_add(out_data_16, in_data_8)
-        out_data_8 = self.upconv8(self.sim8(out_data_8) + out_data_8)  # 512
+        out_data_8 = self.upconv8(self.sim8(out_data_8))  # 512
         return out_data_8
 
     def checkpoint_de_4(self, in_data_4, out_data_8):
         out_data_4 = self.upsample_add(out_data_8, in_data_4)
-        out_data_4 = self.upconv4(self.sim4(out_data_4) + out_data_4)  # 256
+        out_data_4 = self.upconv4(self.sim4(out_data_4))  # 256
         return out_data_4
 
     def checkpoint_de_2(self, in_data_2, out_data_4):
         out_data_2 = self.upsample_add(out_data_4, in_data_2)
-        out_data_2 = self.upconv2(self.sim2(out_data_2) + out_data_2)  # 64
+        out_data_2 = self.upconv2(self.sim2(out_data_2))  # 64
         return out_data_2
 
     def checkpoint_de_1(self, out_data_2):

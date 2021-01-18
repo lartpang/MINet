@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from torch import nn
 
 from backbone.origin.resnet import resnet50

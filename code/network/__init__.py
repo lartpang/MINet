@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # from .LightMINet import *
 from .MINet import *
 

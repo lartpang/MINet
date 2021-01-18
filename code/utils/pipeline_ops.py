@@ -1,11 +1,12 @@
+# -*- coding: utf-8 -*-
 import os
 
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim.optimizer as optim
 import torch.optim.lr_scheduler as sche
-import numpy as np
-from torch.optim import Adam, SGD
+import torch.optim.optimizer as optim
+from torch.optim import SGD, Adam
 
 from utils.misc import construct_print
 
@@ -15,7 +16,7 @@ def get_total_loss(
 ) -> (float, list):
     """
     return the sum of the list of loss functions with train_preds and train_masks
-    
+
     Args:
         train_preds (torch.Tensor): predictions
         train_masks (torch.Tensor): masks

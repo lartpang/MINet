@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 from pprint import pprint
 
@@ -11,11 +12,7 @@ import network as network_lib
 from loss.CEL import CEL
 from utils.dataloader import create_loader
 from utils.metric import cal_maxf, cal_pr_mae_meanf
-from utils.misc import (
-    AvgMeter,
-    construct_print,
-    write_data_to_file,
-)
+from utils.misc import AvgMeter, construct_print, write_data_to_file
 from utils.pipeline_ops import (
     get_total_loss,
     make_optimizer,
@@ -68,7 +65,9 @@ class Solver:
             # resume model only to test model.
             # self.start_epoch is useless
             resume_checkpoint(
-                model=self.net, load_path=self.path_dict["final_state_net"], mode="onlynet",
+                model=self.net,
+                load_path=self.path_dict["final_state_net"],
+                mode="onlynet",
             )
             return
 

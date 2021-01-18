@@ -13,8 +13,8 @@ from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
 
-from network.MINet import MINet_VGG16
 from config import ecssd_path
+from network.MINet import MINet_VGG16
 
 
 def check_mkdir(dir_name):
@@ -35,7 +35,9 @@ class GPUFPSer:
         self.test_image_transform = transforms.Compose(
             [
                 # 输入的如果是一个tuple，则按照数据缩放，但是如果是一个数字，则按比例缩放到短边等于该值
-                transforms.Resize((self.args["new_size"], self.args["new_size"]), interpolation=Image.BILINEAR),
+                transforms.Resize(
+                    (self.args["new_size"], self.args["new_size"]), interpolation=Image.BILINEAR
+                ),
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]
@@ -109,7 +111,9 @@ class CPUFPSer:
         self.test_image_transform = transforms.Compose(
             [
                 # 输入的如果是一个tuple，则按照数据缩放，但是如果是一个数字，则按比例缩放到短边等于该值
-                transforms.Resize((self.args["new_size"], self.args["new_size"]), interpolation=Image.BILINEAR),
+                transforms.Resize(
+                    (self.args["new_size"], self.args["new_size"]), interpolation=Image.BILINEAR
+                ),
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
             ]

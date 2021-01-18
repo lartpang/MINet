@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
 import torch
 import torch.nn as nn
-from torch.nn.parameter import Parameter
 from torch.nn import functional as F
+from torch.nn.parameter import Parameter
 from torch.utils import model_zoo
 
 

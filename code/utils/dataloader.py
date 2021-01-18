@@ -13,12 +13,16 @@ import torch
 from PIL import Image
 from prefetch_generator import BackgroundGenerator
 from torch.nn.functional import interpolate
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 from config import arg_config
-from utils.joint_transforms import Compose, JointResize, RandomHorizontallyFlip, RandomRotate
+from utils.joint_transforms import (
+    Compose,
+    JointResize,
+    RandomHorizontallyFlip,
+    RandomRotate,
+)
 from utils.misc import construct_print
 
 
@@ -189,7 +193,10 @@ def create_loader(data_path, training, size_list=None, prefix=(".jpg", ".png"), 
     else:
         construct_print(f"Testing on: {data_path}")
         imageset = ImageFolder(
-            data_path, in_size=arg_config["input_size"], prefix=prefix, training=False,
+            data_path,
+            in_size=arg_config["input_size"],
+            prefix=prefix,
+            training=False,
         )
         loader = _mask_loader(imageset, shuffle=False, drop_last=False, size_list=None)
 

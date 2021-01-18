@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
 import torch
 import torch.nn as nn
 
-from module.BaseBlocks import BasicConv2d
-from utils.tensor_ops import cus_sample, upsample_add
 from backbone.origin.from_origin import Backbone_ResNet50_in3, Backbone_VGG16_in3
+from module.BaseBlocks import BasicConv2d
 from module.MyModule import AIM, SIM
+from utils.tensor_ops import cus_sample, upsample_add
 
 
 class MINet_VGG16(nn.Module):
@@ -48,19 +49,19 @@ class MINet_VGG16(nn.Module):
             in_data_1, in_data_2, in_data_4, in_data_8, in_data_16
         )
 
-        out_data_16 = self.upconv16(self.sim16(in_data_16) + in_data_16)  # 1024
+        out_data_16 = self.upconv16(self.sim16(in_data_16))  # 1024
 
         out_data_8 = self.upsample_add(out_data_16, in_data_8)
-        out_data_8 = self.upconv8(self.sim8(out_data_8) + out_data_8)  # 512
+        out_data_8 = self.upconv8(self.sim8(out_data_8))  # 512
 
         out_data_4 = self.upsample_add(out_data_8, in_data_4)
-        out_data_4 = self.upconv4(self.sim4(out_data_4) + out_data_4)  # 256
+        out_data_4 = self.upconv4(self.sim4(out_data_4))  # 256
 
         out_data_2 = self.upsample_add(out_data_4, in_data_2)
-        out_data_2 = self.upconv2(self.sim2(out_data_2) + out_data_2)  # 64
+        out_data_2 = self.upconv2(self.sim2(out_data_2))  # 64
 
         out_data_1 = self.upsample_add(out_data_2, in_data_1)
-        out_data_1 = self.upconv1(self.sim1(out_data_1) + out_data_1)  # 32
+        out_data_1 = self.upconv1(self.sim1(out_data_1))  # 32
 
         out_data = self.classifier(out_data_1)
 
@@ -103,19 +104,19 @@ class MINet_Res50(nn.Module):
             in_data_2, in_data_4, in_data_8, in_data_16, in_data_32
         )
 
-        out_data_32 = self.upconv32(self.sim32(in_data_32) + in_data_32)  # 1024
+        out_data_32 = self.upconv32(self.sim32(in_data_32))  # 1024
 
         out_data_16 = self.upsample_add(out_data_32, in_data_16)  # 1024
-        out_data_16 = self.upconv16(self.sim16(out_data_16) + out_data_16)
+        out_data_16 = self.upconv16(self.sim16(out_data_16))
 
         out_data_8 = self.upsample_add(out_data_16, in_data_8)
-        out_data_8 = self.upconv8(self.sim8(out_data_8) + out_data_8)  # 512
+        out_data_8 = self.upconv8(self.sim8(out_data_8))  # 512
 
         out_data_4 = self.upsample_add(out_data_8, in_data_4)
-        out_data_4 = self.upconv4(self.sim4(out_data_4) + out_data_4)  # 256
+        out_data_4 = self.upconv4(self.sim4(out_data_4))  # 256
 
         out_data_2 = self.upsample_add(out_data_4, in_data_2)
-        out_data_2 = self.upconv2(self.sim2(out_data_2) + out_data_2)  # 64
+        out_data_2 = self.upconv2(self.sim2(out_data_2))  # 64
 
         out_data_1 = self.upconv1(self.upsample(out_data_2, scale_factor=2))  # 32
         out_data = self.classifier(out_data_1)

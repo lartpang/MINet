@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import division
 
 from torch.utils import model_zoo
@@ -10,7 +11,9 @@ arXiv preprint arXiv:1611.05431.
 import from https://github.com/facebookresearch/ResNeXt/blob/master/models/resnext.lua
 """
 import math
+
 import torch.nn as nn
+
 from backbone.wsgn import customized_func as L
 
 __all__ = ["l_resnext50", "l_resnext101"]
@@ -29,7 +32,7 @@ class Bottleneck(nn.Module):
     expansion = 4
 
     def __init__(self, inplanes, planes, baseWidth, cardinality, stride=1, downsample=None):
-        """ Constructor
+        """Constructor
         Args:
             inplanes: input channel dimensionality
             planes: output channel dimensionality
@@ -84,7 +87,7 @@ class ResNeXt(nn.Module):
     """
 
     def __init__(self, baseWidth, cardinality, layers, num_classes):
-        """ Constructor
+        """Constructor
         Args:
             baseWidth: baseWidth for ResNeXt.
             cardinality: number of convolution groups.
@@ -120,7 +123,7 @@ class ResNeXt(nn.Module):
                 m.bias.data.zero_()
 
     def _make_layer(self, block, planes, blocks, stride=1):
-        """ Stack n bottleneck modules where n is inferred from the depth of the network.
+        """Stack n bottleneck modules where n is inferred from the depth of the network.
         Args:
             block: block type used to construct ResNext
             planes: number of output channels (need to multiply by block.expansion)

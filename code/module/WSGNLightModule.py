@@ -53,7 +53,7 @@ class SIM(nn.Module):
         x_l2h = self.l2h_2(self.l2h_up(x_l, size=(h, w)))
         x_h = self.relu(self.bnh_2(x_h2h + x_l2h))
 
-        return x_h
+        return x_h + x
 
 
 class conv_2nV1(nn.Module):
