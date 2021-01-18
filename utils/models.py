@@ -10,19 +10,45 @@ from torchvision.models.resnet import resnet50
 from torchvision.models.vgg import vgg16_bn
 
 
-def cus_sample(feat, **kwargs):
+def cus_sample(feat: torch.Tensor, align_corners=False, mode="bilinear", **kwargs) -> torch.Tensor:
     """
-    :param feat: 输入特征
-    :param kwargs: size或者scale_factor
+    Args:
+        feat: 输入特征
+        mode: 插值模式
+        align_corners: 具体差异可见https://www.yuque.com/lart/idh721/ugwn46
+        kwargs: size/scale_factor
     """
     assert len(kwargs.keys()) == 1 and list(kwargs.keys())[0] in ["size", "scale_factor"]
-    return interpolate(feat, **kwargs, mode="bilinear", align_corners=False, recompute_scale_factor=False)
+
+    if size := kwargs.get("size", False):
+        assert isinstance(size, (tuple, list))
+        if isinstance(size, list):
+            size = tuple(size)
+        if size == tuple(feat.shape[2:]):
+            return feat
+    elif scale_factor := kwargs.get("scale_factor", False):
+        assert isinstance(size, (int, float))
+        if scale_factor == 1:
+            return feat
+        # if isinstance(scale_factor, float):
+        kwargs["recompute_scale_factor"] = False
+    else:
+        print("size or scale_factor is not be assigned, the feat will not be resized...")
+        return feat
+    return interpolate(feat, mode=mode, align_corners=align_corners, **kwargs)
 
 
-def upsample_add(*xs):
+def upsample_add(*xs: torch.Tensor, **kwargs) -> torch.Tensor:
+    """
+    resize xs[:-1] to the size of xs[-1] and add them together.
+
+    Args:
+        xs:
+        kwargs: config for cus_sample
+    """
     y = xs[-1]
     for x in xs[:-1]:
-        y = y + interpolate(x, size=y.size()[2:], mode="bilinear", align_corners=False, recompute_scale_factor=False)
+        y = y + cus_sample(x, size=y.size()[2:], **kwargs)
     return y
 
 
@@ -124,7 +150,7 @@ class SIM(nn.Module):
         x_l2h = self.l2h_2(self.l2h_up(x_l, size=(h, w)))
         x_h = self.relu(self.bnh_2(x_h2h + x_l2h))
 
-        return x_h
+        return x_h + x
 
 
 class conv_2nV1(nn.Module):
@@ -350,19 +376,19 @@ class MINet_VGG16(nn.Module):
             in_data_1, in_data_2, in_data_4, in_data_8, in_data_16
         )
 
-        out_data_16 = self.upconv16(self.sim16(in_data_16) + in_data_16)  # 1024
+        out_data_16 = self.upconv16(self.sim16(in_data_16))  # 1024
 
         out_data_8 = self.upsample_add(out_data_16, in_data_8)
-        out_data_8 = self.upconv8(self.sim8(out_data_8) + out_data_8)  # 512
+        out_data_8 = self.upconv8(self.sim8(out_data_8))  # 512
 
         out_data_4 = self.upsample_add(out_data_8, in_data_4)
-        out_data_4 = self.upconv4(self.sim4(out_data_4) + out_data_4)  # 256
+        out_data_4 = self.upconv4(self.sim4(out_data_4))  # 256
 
         out_data_2 = self.upsample_add(out_data_4, in_data_2)
-        out_data_2 = self.upconv2(self.sim2(out_data_2) + out_data_2)  # 64
+        out_data_2 = self.upconv2(self.sim2(out_data_2))  # 64
 
         out_data_1 = self.upsample_add(out_data_2, in_data_1)
-        out_data_1 = self.upconv1(self.sim1(out_data_1) + out_data_1)  # 32
+        out_data_1 = self.upconv1(self.sim1(out_data_1))  # 32
 
         out_data = self.classifier(out_data_1)
 
@@ -405,19 +431,19 @@ class MINet_Res50(nn.Module):
             in_data_2, in_data_4, in_data_8, in_data_16, in_data_32
         )
 
-        out_data_32 = self.upconv32(self.sim32(in_data_32) + in_data_32)  # 1024
+        out_data_32 = self.upconv32(self.sim32(in_data_32))  # 1024
 
         out_data_16 = self.upsample_add(out_data_32, in_data_16)  # 1024
-        out_data_16 = self.upconv16(self.sim16(out_data_16) + out_data_16)
+        out_data_16 = self.upconv16(self.sim16(out_data_16))
 
         out_data_8 = self.upsample_add(out_data_16, in_data_8)
-        out_data_8 = self.upconv8(self.sim8(out_data_8) + out_data_8)  # 512
+        out_data_8 = self.upconv8(self.sim8(out_data_8))  # 512
 
         out_data_4 = self.upsample_add(out_data_8, in_data_4)
-        out_data_4 = self.upconv4(self.sim4(out_data_4) + out_data_4)  # 256
+        out_data_4 = self.upconv4(self.sim4(out_data_4))  # 256
 
         out_data_2 = self.upsample_add(out_data_4, in_data_2)
-        out_data_2 = self.upconv2(self.sim2(out_data_2) + out_data_2)  # 64
+        out_data_2 = self.upconv2(self.sim2(out_data_2))  # 64
 
         out_data_1 = self.upconv1(self.upsample(out_data_2, scale_factor=2))  # 32
         out_data = self.classifier(out_data_1)
