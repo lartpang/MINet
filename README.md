@@ -15,6 +15,8 @@ CVPR 2020.
 
 The code and experimental results have be released now :smile:.
 
+* 2021/1/18:
+    * Fix the form of the SIM module: <https://github.com/lartpang/MINet/issues/15>
 * 2020/12/08:
     * Simplify the code structure.
     * Add a simple version to the `simpler` branch, but I have no time to test it. So, if you find any bugs, you can create an issue.

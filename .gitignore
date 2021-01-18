@@ -1,5 +1,5 @@
-.vscode/
-.idea/
+**/.vscode/**
+**/.idea/**
 /code/output/*
 # except for .gitkeep
 !/code/output/.gitkeep
