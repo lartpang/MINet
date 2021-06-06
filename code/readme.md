@@ -193,13 +193,16 @@ arg_config = {
 5. In the folder `code`, run `python main.py`.
 6. You can find predictions from the model in the folder `pre` of the `output`.
 
+## If you want to inference the trained model on your own dataset...
+
+- Configure the arguments in the script `tools/inference.py`
+- Run it.
+
 ## Evaluation
 
-We evaluate results of all models by [lartpang/sal_eval_toolbox](https://github.com/lartpang/SODEvalToolkit/tree/master/tools).
-
-> [lartpang/sal_eval_toolbox](https://github.com/lartpang/SODEvalToolkit/tree/master/tools) is based on [ArcherFMY/sal_eval_toolbox](https://github.com/ArcherFMY/sal_eval_toolbox/tree/master/tools).
->
-> But, we add the code about E-measure and weighted F-measure and update the related code in our forked repository [lartpang/sal_eval_toolbox](https://github.com/lartpang/SODEvalToolkit/tree/master/tools). Welcome to use it in your code :star:!
+- We evaluate results of all models by [lartpang/sal_eval_toolbox](https://github.com/lartpang/SODEvalToolkit/tree/master/tools).
+    - [lartpang/sal_eval_toolbox](https://github.com/lartpang/SODEvalToolkit/tree/master/tools) is based on [ArcherFMY/sal_eval_toolbox](https://github.com/ArcherFMY/sal_eval_toolbox/tree/master/tools). But, we add the code about E-measure and weighted F-measure and update the related code in our forked repository [lartpang/sal_eval_toolbox](https://github.com/lartpang/SODEvalToolkit/tree/master/tools). Welcome to use it in your code :star:!
+- 2021-06-06: A better evaluation toolbox for RGB/RGB-D/Co-RGB SOD <https://github.com/lartpang/PySODEvalToolkit>
 
 ## More
 

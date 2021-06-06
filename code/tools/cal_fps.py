@@ -6,6 +6,7 @@
 # @GitHub  : https://github.com/lartpang
 
 import os
+import sys
 import time
 
 import torch
@@ -13,6 +14,7 @@ from PIL import Image
 from torchvision import transforms
 from tqdm import tqdm
 
+sys.path.append("../")
 from config import ecssd_path
 from network.MINet import MINet_VGG16
 

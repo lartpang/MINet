@@ -15,6 +15,10 @@ CVPR 2020.
 
 The code and experimental results have be released now :smile:.
 
+* 2021/6/6:
+    * Move the script `cal_fps.py` into the folder `tools`.
+    * Add a script in `tools` folder for the model inference on your own datasets.
+    * Improve `code/readme.md`.
 * 2021/1/18:
     * Fix the form of the SIM module: <https://github.com/lartpang/MINet/issues/15>
 * 2020/12/08:
