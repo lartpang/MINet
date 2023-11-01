@@ -13,6 +13,8 @@
 
 The code and experimental results have be released now :smile:.
 
+* 2023/11/1:
+    * Add a single script to predict the SOD map without masks. 
 * 2021/1/18:
     * Fix the form of the SIM module: <https://github.com/lartpang/MINet/issues/15>
 * 2020/12/08:

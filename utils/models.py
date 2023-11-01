@@ -52,8 +52,8 @@ def upsample_add(*xs: torch.Tensor, **kwargs) -> torch.Tensor:
     return y
 
 
-def Backbone_ResNet50_in3():
-    net = resnet50(pretrained=True)
+def Backbone_ResNet50_in3(pretrained=True):
+    net = resnet50(pretrained=pretrained)
     div_2 = nn.Sequential(*list(net.children())[:3])
     div_4 = nn.Sequential(*list(net.children())[3:5])
     div_8 = net.layer2
@@ -63,8 +63,8 @@ def Backbone_ResNet50_in3():
     return div_2, div_4, div_8, div_16, div_32
 
 
-def Backbone_VGG16_in3():
-    net = vgg16_bn(pretrained=True, progress=True)
+def Backbone_VGG16_in3(pretrained=True):
+    net = vgg16_bn(pretrained=pretrained, progress=True)
     div_1 = nn.Sequential(*list(net.children())[0][0:6])
     div_2 = nn.Sequential(*list(net.children())[0][6:13])
     div_4 = nn.Sequential(*list(net.children())[0][13:23])
@@ -336,7 +336,7 @@ class AIM(nn.Module):
 
 
 class MINet_VGG16(nn.Module):
-    def __init__(self):
+    def __init__(self, pretrained=True):
         super(MINet_VGG16, self).__init__()
         self.upsample_add = upsample_add
         self.upsample = cus_sample
@@ -347,7 +347,7 @@ class MINet_VGG16(nn.Module):
             self.encoder4,
             self.encoder8,
             self.encoder16,
-        ) = Backbone_VGG16_in3()
+        ) = Backbone_VGG16_in3(pretrained=pretrained)
 
         self.trans = AIM((64, 128, 256, 512, 512), (32, 64, 64, 64, 64))
 
@@ -396,9 +396,9 @@ class MINet_VGG16(nn.Module):
 
 
 class MINet_Res50(nn.Module):
-    def __init__(self):
+    def __init__(self, pretrained=True):
         super(MINet_Res50, self).__init__()
-        self.div_2, self.div_4, self.div_8, self.div_16, self.div_32 = Backbone_ResNet50_in3()
+        self.div_2, self.div_4, self.div_8, self.div_16, self.div_32 = Backbone_ResNet50_in3(pretrained=pretrained)
 
         self.upsample_add = upsample_add
         self.upsample = cus_sample
